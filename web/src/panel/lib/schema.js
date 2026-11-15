@@ -3,8 +3,6 @@
 // Documentación completa: docs/firestore-schema.md
 // Si cambias algo aquí, actualiza también ese documento y avisa al worker (PCIT-35).
 
-export const SCHEMA_VERSION = 1
-
 export const COLLECTIONS = Object.freeze({
   users: 'users',
   platformAdmins: 'platformAdmins',

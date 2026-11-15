@@ -27,7 +27,6 @@
 .dashboard-player-select select:focus-visible { border-color: var(--accent-ink, var(--players-ink)); box-shadow: 0 0 0 1px var(--accent-ink, var(--players-ink)); outline: none; }
 .dashboard-player-select select:disabled { cursor: not-allowed; opacity: 0.6; }
 [data-theme='light'] .dashboard-player-select select { color-scheme: light; }
-.dashboard-chip { display: inline-flex; align-items: center; padding: 0.2rem 0.65rem; border-radius: 999px; background: var(--chip, var(--players-field)); color: var(--text3, var(--players-text)); font-size: 0.75rem; font-weight: 600; white-space: nowrap; }
 .dashboard-perfil-vacio .ac-feedback { padding: 0; text-align: left; }
 .dashboard-perfil-vacio .ac-feedback__symbol { display: none; }
 .dashboard-perfil-vacio .ac-feedback__title { margin: 0; font-size: 1.05rem; }

@@ -7,7 +7,7 @@ const DIA = 24 * 60 * 60 * 1000
 const UMBRAL_VELOCIDAD = 5
 const UMBRAL_PORCENTAJE = 5
 
-export function aFecha(valor) {
+function aFecha(valor) {
   if (!valor) return null
   const fecha = typeof valor.toDate === 'function' ? valor.toDate() : new Date(valor)
   return Number.isNaN(fecha.getTime()) ? null : fecha

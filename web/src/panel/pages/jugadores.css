@@ -43,7 +43,6 @@
 .players-eyebrow { color: var(--players-muted); text-transform: uppercase; letter-spacing: 0.08em; font-size: 0.75rem; line-height: 1rem; font-weight: 600; margin: 0 0 0.375rem; }
 .players-subtitle { color: var(--players-muted); margin: 0.375rem 0 0; font-size: 1rem; line-height: 1.5rem; }
 .players-page h1 { font-family: var(--font-display, inherit); font-size: 2.75rem; font-weight: 700; line-height: 1; letter-spacing: normal; margin: 0; }
-.players-title-dot { color: var(--players-ink); }
 .players-page-heading p:last-child { color: var(--players-muted); margin: 0.375rem 0 0; font-size: 1rem; line-height: 1.5rem; }
 .players-button-primary, .players-button-secondary { display: inline-flex; justify-content: center; align-items: center; gap: 0.5rem; padding: 0.8rem 1.1rem; border-radius: 0.6rem; border: 1px solid transparent; font-weight: 600 !important; font-size: 0.875rem !important; min-height: 44px; }
 .players-button-primary { background: #d7f25c; color: #12110f; }
@@ -113,15 +112,10 @@
 .players-name { display: flex; align-items: center; gap: 0.8rem; min-width: 0; font-weight: 500; }
 .players-page .ac-table { min-width: 540px; }
 .players-page .ac-table th:first-child { width: 15rem; }
-.players-table-hint { display: none; }
 .players-name > span:last-child { max-width: 20ch; overflow-wrap: break-word; }
 .players-avatar { background: var(--players-field); color: var(--players-info); width: 2.3rem; height: 2.3rem; border-radius: 50%; display: grid; place-items: center; flex-shrink: 0; font-size: 0.7rem; font-weight: 600; text-transform: uppercase; }
 .players-footnote { color: var(--players-muted); font-size: 0.8125rem; margin: 1.2rem 0; }
 .players-form-panel { background: var(--players-card); border: 1px solid var(--players-line); border-radius: 1rem; padding: clamp(1.1rem, 3vw, 2rem); margin-top: 1.5rem; }
-.players-form-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; flex-wrap: wrap; margin-bottom: 1.75rem; }
-.players-form-heading h2 { margin: 0; font-size: 1.5rem; font-weight: 600; }
-.players-form-heading p:last-child { color: var(--players-muted); font-size: 0.875rem; margin: 0.5rem 0 0; }
-.players-required-note { color: var(--players-muted); font-size: 0.75rem; }
 .players-form-fields { padding: 0; margin: 0; border: 0; min-width: 0; }
 .players-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.25rem; }
 .players-field-wide { grid-column: 1 / -1; }

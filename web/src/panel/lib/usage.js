@@ -7,7 +7,7 @@ import { COLLECTIONS, ORG_USAGE } from './schema.js'
 import { PLANES } from './planes.js'
 
 /** Error que usa la web cuando el plan ya no permite más análisis este mes. */
-export const LIMIT_ERROR_CODE = 'analysis/limit'
+const LIMIT_ERROR_CODE = 'analysis/limit'
 
 /** Análisis por mes del plan de la organización; null = sin tope. Igual que withinPlan en las reglas. */
 export function planLimit(plan) {
