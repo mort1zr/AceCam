@@ -5,11 +5,13 @@ import { getDocFromServer, getDocsFromServer } from 'firebase/firestore'
 import { afterEach, expect, it, vi } from 'vitest'
 import { usagePeriod } from '../../lib/usage.js'
 import { savePlatformOrganization } from '../../lib/services/platformOrganizations.js'
+import { changePlatformMemberRole } from '../../lib/services/platformMembers.js'
 import AdminDirectory from './AdminDirectory.jsx'
 
 vi.mock('../../lib/firebase.js', () => ({ db: {} }))
 vi.mock('../../context/AuthContext.js', () => ({ useAuth: () => ({ user: { uid: 'platform' } }) }))
 vi.mock('../../lib/services/platformOrganizations.js', () => ({ savePlatformOrganization: vi.fn() }))
+vi.mock('../../lib/services/platformMembers.js', () => ({ changePlatformMemberRole: vi.fn() }))
 vi.mock('firebase/firestore', () => ({
   collection: (_db, name) => name,
   doc: (_db, ...parts) => parts.join('/'),
@@ -45,8 +47,8 @@ it('muestra miembros, uso mensual y altas a partir de lecturas de Firestore', as
   ])
   const date = new Intl.DateTimeFormat('es-PE', { dateStyle: 'medium', timeZone: 'UTC' }).format(new Date('2026-11-01'))
   expect(cells(users)).toEqual([
-    ['admin@example.test', 'Equipo', 'Administrador de equipo', '—'],
-    ['coach@example.test', 'Equipo', 'Entrenador', date],
+    ['admin@example.test', 'Equipo', 'Administrador de equipo', '—', 'Cambiar rol'],
+    ['coach@example.test', 'Equipo', 'Entrenador', date, 'Cambiar rol'],
   ])
   expect(screen.getByRole('button', { name: 'Crear organización' })).toBeTruthy()
 })
@@ -80,4 +82,26 @@ it('guarda una nueva organización y exige confirmar el archivo', async () => {
   await user.click(screen.getByRole('button', { name: 'Archivar', exact: true }))
   expect(savePlatformOrganization).toHaveBeenLastCalledWith({}, 'platform', { id: 'nuevo', archived: true })
   expect(await screen.findByRole('button', { name: 'Reactivar Club Nuevo' })).toBeTruthy()
+})
+
+it('confirma el cambio de rol y conserva protegido al propietario', async () => {
+  let memberRole = 'coach'
+  getDocsFromServer.mockImplementation(async name => ({ docs: name === 'orgs'
+    ? [record('equipo', { name: 'Equipo', ownerId: 'owner', plan: 'pro' })]
+    : [
+        record('owner', { email: 'owner@example.test', orgId: 'equipo', role: 'coach' }),
+        record('miembro', { email: 'miembro@example.test', orgId: 'equipo', role: memberRole }),
+      ],
+  }))
+  getDocFromServer.mockResolvedValue(record(usagePeriod(), undefined))
+  changePlatformMemberRole.mockImplementation(async (_db, _uid, change) => { memberRole = change.role })
+  const user = userEvent.setup()
+  render(<AdminDirectory />)
+  await user.click(await screen.findByRole('button', { name: 'Cambiar rol miembro@example.test' }))
+  expect(screen.queryByRole('button', { name: 'Cambiar rol owner@example.test' })).toBeNull()
+  expect(screen.getByRole('button', { name: 'Confirmar' }).disabled).toBe(true)
+  await user.selectOptions(screen.getByLabelText('Nuevo rol'), 'admin')
+  await user.click(screen.getByRole('button', { name: 'Confirmar' }))
+  expect(changePlatformMemberRole).toHaveBeenCalledWith({}, 'platform', { id: 'miembro', expectedRole: 'coach', role: 'admin' })
+  expect(await screen.findByRole('cell', { name: 'Administrador de equipo' })).toBeTruthy()
 })

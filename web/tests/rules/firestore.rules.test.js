@@ -34,6 +34,7 @@ import { publicFormExists, submitPublicApplication } from '../../src/panel/lib/p
 import { readGoogleFormResponses } from '../../src/panel/lib/googleFormsApplications.js'
 import { importGoogleFormApplications } from '../../src/panel/lib/services/googleFormsRecruitment.js'
 import { savePlatformOrganization } from '../../src/panel/lib/services/platformOrganizations.js'
+import { changePlatformMemberRole } from '../../src/panel/lib/services/platformMembers.js'
 
 const ORG = 'org-demo'
 const OTHER_ORG = 'org-club'
@@ -87,6 +88,39 @@ beforeEach(async () => {
 
 const coachDb = () => env.authenticatedContext(COACH, { email: 'coach@acecam.test' }).firestore()
 const anonDb = () => env.unauthenticatedContext().firestore()
+
+it('cambia el rol de un miembro con auditoría y protege al propietario y a plataforma', async () => {
+  const uid = 'admin-plataforma'
+  const memberId = 'miembro-de-equipo'
+  const protectedId = 'otro-operador'
+  const platform = env.authenticatedContext(uid).firestore()
+  await env.withSecurityRulesDisabled(async context => {
+    const db = context.firestore()
+    const batch = writeBatch(db)
+    for (const operator of [uid, protectedId]) batch.set(doc(db, 'platformAdmins', operator), {})
+    for (const member of [memberId, protectedId]) {
+      batch.set(doc(db, 'users', member), { orgId: ORG, role: 'coach', suspended: false })
+    }
+    await batch.commit()
+  })
+  const profile = doc(platform, 'users', memberId)
+  const promote = { expectedRole: 'coach', role: 'admin' }
+  await assertFails(updateDoc(profile, { role: 'admin' }))
+  await assertFails(changePlatformMemberRole(coachDb(), COACH, { id: memberId, ...promote }))
+  await assertFails(changePlatformMemberRole(platform, uid, { id: COACH, ...promote }))
+  await assertFails(changePlatformMemberRole(platform, uid, { id: protectedId, ...promote }))
+  await changePlatformMemberRole(platform, uid, { id: memberId, ...promote })
+  const updated = (await getDoc(profile)).data()
+  expect(updated).toMatchObject({ orgId: ORG, role: 'admin', suspended: false })
+  expect((await getDoc(doc(platform, 'platformAudit', updated.platformAuditId))).data()).toMatchObject({
+    actorId: uid, entity: 'users', targetId: memberId,
+    before: { role: 'coach', suspended: false }, after: { role: 'admin', suspended: false },
+  })
+  await expect(changePlatformMemberRole(platform, uid, { id: memberId, ...promote }))
+    .rejects.toMatchObject({ code: 'member/conflict' })
+  await changePlatformMemberRole(platform, uid, { id: memberId, expectedRole: 'admin', role: 'coach' })
+  expect((await getDoc(profile)).data().role).toBe('coach')
+})
 
 it('gestiona las organizaciones con auditoría y conserva el historial al archivar', async () => {
   const uid = 'operador'

@@ -6,6 +6,7 @@ import { db } from '../../lib/firebase.js'
 import { loadAdminDirectory } from '../../lib/services/firestoreAdminDirectory.js'
 import { savePlatformOrganization } from '../../lib/services/platformOrganizations.js'
 import AdminInvite from './AdminInvite.jsx'
+import AdminMemberRole from './AdminMemberRole.jsx'
 
 const copy = {
   es: {
@@ -108,6 +109,9 @@ export default function AdminDirectory() {
       const created = value?.toDate?.()
       return Number.isFinite(created?.getTime()) ? date.format(created) : '—'
     } },
+    { key: 'actions', label: t.actions, render: (_, member) => (
+      <AdminMemberRole db={db} uid={user.uid} member={member} labels={t.roles} onSaved={retry} />
+    ) },
   ]
 
   if (result?.failed) return <DataTable caption={t.organizations} columns={organizations} error={t.error} onRetry={retry} />

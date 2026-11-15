@@ -178,6 +178,21 @@ service cloud.firestore {
     // Se crea en el registro (PCIT-21), en el mismo lote que su organización.
 
     match /users/{uid} {
+      function auditedRoleChange() {
+        let next = request.resource.data;
+        let entry = /databases/$(database)/documents/platformAudit/$(next.platformAuditId);
+        let org = /databases/$(database)/documents/orgs/$(resource.data.orgId);
+        return isPlatformAdmin()
+          && !exists(/databases/$(database)/documents/platformAdmins/$(uid))
+          && exists(org) && get(org).data.get('ownerId', null) != uid
+          && onlyChanges(['role', 'updatedAt', 'platformAuditId'])
+          && next.role in ['coach', 'admin'] && next.role != resource.data.role
+          && next.updatedAt == request.time
+          && !exists(entry) && existsAfter(entry)
+          && getAfter(entry).data.entity == 'users'
+          && getAfter(entry).data.targetId == uid;
+      }
+
       allow get: if signedIn()
         && (uid == request.auth.uid || isPlatformAdmin() || (resource != null && inOrg(resource.data.orgId)));
       allow list: if isPlatformAdmin() || inOrg(resource.data.orgId);
@@ -216,6 +231,7 @@ service cloud.firestore {
         && isText(request.resource.data.displayName, 2, 120)
         && optionalText(request.resource.data, 'jobTitle', 120);
 
+      allow update: if auditedRoleChange();
       allow delete: if false;
     }
 
