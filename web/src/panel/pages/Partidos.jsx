@@ -1,10 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { DataTable, EmptyState } from '../components/ui'
 import Marcador from '../components/players/Marcador.jsx'
 import PaginacionTabla, { tamanosPagina } from '../components/ui/PaginacionTabla.jsx'
 import { EsqueletoTabla } from '../components/dashboard/EsqueletoDashboard.jsx'
 import '../components/dashboard/esqueleto.css'
-import MatchReport from '../components/analysis/MatchReport.jsx'
 import { useAnalysisQueue } from '../hooks/useAnalysisQueue.js'
 import { usePlayers } from '../hooks/usePlayers.js'
 import { useNombreOrganizacion } from '../hooks/useNombreOrganizacion.js'
@@ -16,6 +15,8 @@ import { createAzureProcessedVideoService } from '../lib/azureVideos.js'
 import { createProcessedVideoService } from '../lib/services/processedVideoService.js'
 import './jugadores.css'
 import PelotaTitulo from '../components/layout/PelotaTitulo.jsx'
+
+const MatchReport = lazy(() => import('../components/analysis/MatchReport.jsx'))
 
 function matchesErrorMessage(error) {
   if (error?.code === 'permission-denied' || error?.code === 'unauthenticated') {
@@ -86,15 +87,17 @@ function MatchesList({ matchesService, playersService, notesService, videoServic
   }
 
   if (selectedMatch) return (
-    <MatchReport
-      key={selectedMatch.id}
-      match={selectedMatch}
-      playerName={playerNames.get(selectedMatch.playerId) || 'Jugador no disponible'}
-      notesService={notesService}
-      videoService={videoService}
-      organizacion={organizacion}
-      onBack={() => setMatchId('')}
-    />
+    <Suspense fallback={null}>
+      <MatchReport
+        key={selectedMatch.id}
+        match={selectedMatch}
+        playerName={playerNames.get(selectedMatch.playerId) || 'Jugador no disponible'}
+        notesService={notesService}
+        videoService={videoService}
+        organizacion={organizacion}
+        onBack={() => setMatchId('')}
+      />
+    </Suspense>
   )
 
   return (

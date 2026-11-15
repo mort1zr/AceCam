@@ -7,6 +7,7 @@ import { app, auth, emulatorHost, useEmulators } from './firebaseAuth.js'
 import { EMULATOR_PORTS } from './firebaseConfig.js'
 
 export { auth }
+export { doc, onSnapshot } from 'firebase/firestore'
 export const db = getFirestore(app)
 export const storage = getStorage(app)
 

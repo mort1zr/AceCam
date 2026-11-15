@@ -130,7 +130,7 @@ it('abre el reporte con el contrato del worker y mantiene los filtros al volver'
   await user.selectOptions(await screen.findByLabelText('Jugador'), 'p-a')
   fireEvent.change(screen.getByLabelText('Desde'), { target: { value: '2026-10-23' } })
   await user.click(screen.getByRole('button', { name: /Ver reporte del partido con Rival de prueba/ }))
-  const title = screen.getByRole('heading', { name: 'Valeria Torres · Rival de prueba' })
+  const title = await screen.findByRole('heading', { name: 'Valeria Torres · Rival de prueba' })
   expect(document.activeElement).toBe(title)
   const report = within(screen.getByRole('region', { name: title.textContent.trim() }))
   const card = label => within(report.getByRole('heading', { name: label }).closest('article'))
