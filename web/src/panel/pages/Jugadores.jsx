@@ -57,6 +57,7 @@ function PlayersWorkspace({ service, rankingService }) {
   const listColumns = service.canViewProfile ? [...columns, {
     key: 'profile',
     align: 'right',
+    action: true,
     label: 'Perfil',
     render: (_, player) => service.canViewProfile(player) && (
       <button type="button" className="players-button-secondary" disabled={showForm} aria-label={`Ver perfil de ${player.fullName}`} onClick={() => setProfileId(player.id)}>Ver perfil</button>
@@ -111,13 +112,13 @@ function PlayersWorkspace({ service, rankingService }) {
             </select>
           </div>
           <div className="players-limpiar" data-visible={filtered || undefined} aria-hidden={!filtered || undefined} inert={!filtered}>
-            <button type="button" className="players-button-secondary" onClick={() => { setName(''); setAcademy(''); setPage(1) }}>Limpiar filtros</button>
+            <button type="button" className="players-button-secondary players-button-limpiar" onClick={() => { setName(''); setAcademy(''); setPage(1) }}>Limpiar filtros</button>
           </div>
         </div>
       )}
-      {hasPlayers && matchingRows.length > 0 && <p className="players-table-hint">Desliza la tabla para ver todas las columnas.</p>}
       {loading ? <EsqueletoTabla /> : <DataTable
         resizable
+        cards
         caption="Jugadores registrados"
         columns={listColumns}
         rows={matchingRows.slice(offset, offset + pageSize)}

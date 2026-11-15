@@ -5,7 +5,7 @@ import './ui.css'
 /** Rows come from the page's service; this component never fetches data. */
 export function DataTable({
   caption, columns, rows = [], rowKey = 'id', loading = false, error,
-  onRetry, emptyTitle = 'Todavía no hay registros', emptyDescription, resizable = false,
+  onRetry, emptyTitle = 'Todavía no hay registros', emptyDescription, resizable = false, cards = false,
 }) {
   const [widths, setWidths] = useState(null)
   const headers = useRef({})
@@ -47,7 +47,7 @@ export function DataTable({
   return (
     <div className="ac-ui ac-table-scroll" role="region" aria-label={caption} tabIndex={0}>
       <table
-        className={`ac-table${resizable ? ' ac-table--columnas' : ''}`}
+        className={`ac-table${resizable ? ' ac-table--columnas' : ''}${cards ? ' ac-table--tarjetas' : ''}`}
         style={widths ? { tableLayout: 'fixed', width: '100%', minWidth: widths.reduce((a, b, i) => a + (i === widths.length - 1 ? 120 : b), 0) } : undefined}
       >
         <caption>{caption}</caption>
@@ -70,7 +70,7 @@ export function DataTable({
         <tbody>
           {rows.map(row => (
             <tr key={typeof rowKey === 'function' ? rowKey(row) : row[rowKey]}>
-              {columns.map(column => <td key={column.key} className={column.align === 'right' ? 'ac-align-right' : undefined}>{column.render ? column.render(row[column.key], row) : (row[column.key] ?? '—')}</td>)}
+              {columns.map(column => <td key={column.key} data-label={column.label} className={[column.align === 'right' && 'ac-align-right', column.action && 'ac-cell-action'].filter(Boolean).join(' ') || undefined}>{column.render ? column.render(row[column.key], row) : (row[column.key] ?? '—')}</td>)}
             </tr>
           ))}
         </tbody>

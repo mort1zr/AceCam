@@ -36,3 +36,35 @@
 @media (max-width: 640px) { .cmp-valor { font-size: 1.5rem; } .cmp-col { padding-inline: 0.5rem; } }
 .cmp-mejor--hueco { visibility: hidden; }
 .cmp-escala { margin: 0.6rem 0 0; color: var(--players-muted); font-size: 0.75rem; }
+@media (max-width: 640px) {
+  .cmp-modos { width: 100%; }
+  .cmp-modos .ac-segmented { width: 100%; }
+  .cmp-modos .ac-segmented__options { display: grid; grid-template-columns: 1fr; width: 100%; }
+  .cmp-modos .ac-segmented__option span { display: flex; align-items: center; justify-content: center; min-height: 44px; text-align: center; }
+  .cmp-acciones { flex-direction: column; align-items: stretch; }
+  .cmp-acciones > .players-button-secondary { width: 100%; }
+  .cmp-col { gap: 0.7rem; padding-block: 1rem 0.9rem; }
+  .cmp-col .players-field { width: 100%; }
+  .cmp-col select { padding: 0.5rem 1.6rem 0.5rem 0.5rem; font-size: 0.875rem; text-overflow: ellipsis; }
+  .cmp-vacia { width: 100%; aspect-ratio: auto; min-height: 5.5rem; padding: 0.5rem; font-size: 0.75rem; }
+  .cmp-quitar { top: 0.4rem; right: 0.4rem; }
+  .cmp-titulo { font-size: 1.1rem; }
+  .cmp-radar { padding: 1rem 0.5rem; }
+  .cmp-radar svg { width: min(100%, 17rem); }
+  .cmp-leyenda { font-size: 0.75rem; gap: 0.4rem 0.9rem; }
+  .cmp-seccion th { padding-inline: 0.75rem; }
+  .cmp-tabla td { padding: 0.7rem 0.25rem; }
+  .cmp-etiqueta-fila { font-size: 0.72rem; overflow-wrap: anywhere; }
+  .cmp-mejor { font-size: 0.6rem; padding-inline: 0.45rem; }
+  .cmp-marco:not([data-n="2"]) .cmp-cabeza { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .cmp-marco:not([data-n="2"]) .cmp-col { border-top: 3px solid var(--color); }
+  .cmp-marco:not([data-n="2"]) .cmp-col:last-child:nth-child(odd) { grid-column: 1 / -1; }
+  .cmp-marco:not([data-n="2"]) .cmp-col:last-child:nth-child(odd) .players-field { width: min(100%, 14rem); }
+  .cmp-marco:not([data-n="2"]) .cmp-col:nth-child(-n+2) { border-bottom: 1px solid var(--line, var(--players-line)); }
+  .cmp-marco:not([data-n="2"]) .cmp-barra { display: none; }
+  .cmp-marco:not([data-n="2"]) .cmp-valor { font-size: 1.25rem; }
+  .cmp-marco:not([data-n="2"]) .cmp-valor small { display: block; margin: 0.15rem 0 0; font-size: 0.65rem; }
+  .cmp-scroll > * { min-width: calc(var(--n) * 5.5rem); }
+  .cmp-aviso { padding: 0; }
+  .cmp-aviso > * { padding-block: 1.25rem; }
+}

@@ -32,6 +32,31 @@ const processingLabels = new Map([
   ['saving', 'Guardando el resultado…'],
 ])
 
+const stageRanges = new Map([
+  ['preparing', [0, 4]],
+  ['analyzing', [4, 6]],
+  ['detecting', [6, 60]],
+  ['calculating', [60, 66]],
+  ['rendering', [66, 90]],
+  ['encoding', [90, 97]],
+  ['saving', [97, 100]],
+])
+
+function overallPercent(stage, done, total, hasFrames) {
+  const range = stageRanges.get(stage)
+  if (!range) return null
+  const [from, to] = range
+  const fraction = hasFrames ? done / total : 0
+  return Math.min(99, Math.round(from + (to - from) * fraction))
+}
+
+function remainingLabel(elapsed, percent) {
+  if (elapsed === null || percent === null || percent < 8 || elapsed < 15) return null
+  const left = Math.max(1, Math.round((elapsed * (100 - percent)) / percent))
+  if (left < 60) return 'Falta menos de 1 min'
+  return `Faltan unos ${Math.round(left / 60)} min`
+}
+
 function ProcessingProgress({ match, playerName }) {
   const startedAt = match.startedAt?.toMillis?.()
   const [now, setNow] = useState(() => Date.now())
@@ -48,12 +73,15 @@ function ProcessingProgress({ match, playerName }) {
   const { done, total } = match.analysisFrames ?? {}
   const hasFrames = Number.isInteger(done) && Number.isInteger(total) && total > 0 && done >= 0 && done <= total
   const label = `Análisis de ${playerName} contra ${match.opponent} (${match.matchDate})`
+  const percent = overallPercent(match.analysisStage, done, total, hasFrames)
+  const remaining = remainingLabel(elapsed, percent)
 
   return (
     <div className="analysis-processing">
-      {hasFrames
-        ? <progress className="analysis-processing-frames" aria-label={label} max={total} value={done} />
+      {percent !== null
+        ? <progress className="analysis-processing-frames" aria-label={label} max={100} value={percent} />
         : <div className="analysis-processing-bar" role="progressbar" aria-label={label} />}
+      {percent !== null && <strong className="analysis-processing-percent">{percent} %{remaining && ` · ${remaining}`}</strong>}
       <span aria-live="polite">
         {processingLabels.get(match.analysisStage) ?? processingLabels.get('analyzing')}
       </span>
@@ -114,14 +142,12 @@ function Cola({ columns, rows, loading, error, onRetry }) {
           {loading ? 'Cargando…' : `${rows.length} ${rows.length === 1 ? 'partido' : 'partidos'}`}
         </span>
       </div>
-      {ready && rows.length > 0 && (
-        <p className="players-table-hint">Desliza la tabla para ver todas las columnas.</p>
-      )}
       {loading ? (
         <EsqueletoTabla etiqueta="partidos" />
       ) : (
         <DataTable
           resizable
+          cards
           caption="Partidos y estado del análisis"
           columns={columns}
           rows={visibleRows}

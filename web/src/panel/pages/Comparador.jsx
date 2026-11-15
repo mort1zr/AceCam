@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { EmptyState, ErrorState, LoadingState, SegmentedControl } from '../components/ui'
 import TarjetaJugador from '../components/dashboard/TarjetaJugador.jsx'
-import { MarcoComparacion, RadarSuperpuesto, TablaComparacion } from '../components/comparador/ComparacionVisual.jsx'
+import { COLORES, MarcoComparacion, RadarSuperpuesto, TablaComparacion } from '../components/comparador/ComparacionVisual.jsx'
 import { useDashboardOverview } from '../hooks/useDashboardOverview.js'
 import { usePlayers } from '../hooks/usePlayers.js'
 import { buildPlayerComparisonHistory, comparisonPeriods } from '../lib/comparisonHistory.js'
@@ -69,7 +69,7 @@ function ComparisonWorkspace({ players, overviewService, selection, setSelection
           const player = selectedPlayers[index]
           const overview = overviews[index]
           return (
-            <div key={index} className="cmp-col">
+            <div key={index} className="cmp-col" style={{ '--color': COLORES[index] }}>
               {selection.length > 2 && (
                 <button type="button" className="cmp-quitar" aria-label={`Quitar columna ${index + 1}`} onClick={() => setSelection(previous => previous.length > 2 ? previous.filter((_, position) => position !== index) : previous)}>×</button>
               )}
@@ -86,7 +86,7 @@ function ComparisonWorkspace({ players, overviewService, selection, setSelection
               <div className="players-field">
                 <label className="sr-only" htmlFor={`compare-player-${index}`}>Jugador {index + 1}</label>
                 <select id={`compare-player-${index}`} value={player?.id ?? ''} onChange={event => select(index, event.target.value)}>
-                  <option value="">Selecciona un jugador</option>
+                  <option value="">Elegir jugador</option>
                   {players.map(item => (
                     <option key={item.id} value={item.id} disabled={item.id !== id && selection.includes(item.id)}>{item.fullName}</option>
                   ))}
@@ -105,7 +105,7 @@ function ComparisonWorkspace({ players, overviewService, selection, setSelection
             {comparables.length >= 2 && <RadarSuperpuesto columnas={comparables} />}
             <div className="cmp-scroll"><TablaComparacion caption="Comparación de jugadores" columnas={columnas} /></div>
           </>
-        ) : <div className="p-5"><EmptyState title="Selecciona al menos dos jugadores" description="Los indicadores disponibles aparecerán lado a lado." /></div>}
+        ) : <div className="cmp-aviso p-5"><EmptyState title="Selecciona al menos dos jugadores" description="Los indicadores disponibles aparecerán lado a lado." /></div>}
       </MarcoComparacion>
     </>
   )
@@ -202,8 +202,8 @@ function ComparisonPanel({ playersService, overviewService, historyService }) {
 
   return (
     <>
-      <div className="mt-5 flex flex-wrap items-end justify-between gap-3">
-        <SegmentedControl label="Modo de comparación" options={comparisonModes} value={mode} onChange={setMode} />
+      <div className="cmp-acciones mt-5 flex flex-wrap items-end justify-between gap-3">
+        <div className="cmp-modos"><SegmentedControl label="Modo de comparación" options={comparisonModes} value={mode} onChange={setMode} /></div>
         {mode === 'players' && players.rows.length >= 2 && (
           <button
             type="button"
