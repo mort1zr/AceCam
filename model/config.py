@@ -36,7 +36,7 @@ DEFAULTS: dict[str, Any] = {
     "bounces": {"detector": "rules", "classifier": "models/bounce_classifier.json"},
     "match": {"first_server": "auto", "best_of": 3, "games_per_set": 6, "tiebreak_points": 7,
               "match_tiebreak_points": 10, "no_ad": False, "final_set": "tiebreak", "initial_score": None},
-    "worker": {"max_duration_seconds": 60, "min_resolution": 720, "min_fps": 25, "max_fps": 60},
+    "worker": {"max_duration_seconds": 0, "min_resolution": 720, "min_fps": 25, "max_fps": 60},
     "use_cache": False,
     "render_video": True,
 }

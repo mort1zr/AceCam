@@ -300,6 +300,26 @@ def test_the_analyzer_rejects_long_videos_before_running_the_model(tmp_path, mon
     assert ran == [1]
 
 
+@pytest.mark.parametrize("seconds", [61, 600])
+def test_default_analyzer_passes_long_videos_to_pipeline(tmp_path, monkeypatch, seconds):
+    import main
+    import utils
+    from worker.__main__ import make_analyzer
+
+    video_path = tmp_path / "partido.mp4"
+    monkeypatch.setattr(utils, "get_video_info", lambda path: utils.VideoInfo(30, 1920, 1080, seconds * 30))
+    received = []
+
+    def run_pipeline(config, render):
+        received.append(config["paths"]["input"])
+        return {"model_statistics": {"durationSeconds": seconds}}
+
+    monkeypatch.setattr(main, "run_pipeline", run_pipeline)
+    analyze = make_analyzer(render_video=False)
+
+    assert analyze(video_path) == {"durationSeconds": seconds}
+    assert received == [str(video_path)]
+
 
 # ---------------------------------------------- resolución mínima
 

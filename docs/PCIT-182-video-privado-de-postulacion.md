@@ -8,9 +8,10 @@ Abre la demo en `http://127.0.0.1:5176`.
 1. El dueño o administrador crea un enlace en **Reclutamiento**.
 2. Abre el enlace de la demo en una ventana sin sesión. Completa los datos,
    adjunta un MP4 o MOV opcional y confirma la autorización.
-3. Se admiten hasta 60 segundos y 500 MiB, al menos 1280 píxeles en el lado
-   largo y 720 en el corto, y de 25 a 60 FPS. El navegador comprueba
-   duración y dimensiones. La API comprueba formato y metadatos antes
+3. Se admiten archivos de hasta 500 MiB sin tope de duración, con al menos
+   1280 píxeles en el lado largo y 720 en el corto, y de 25 a 60 FPS.
+   El navegador comprueba que puede leer el video y valida sus dimensiones.
+   La API comprueba formato y metadatos antes
    de guardar en Storage.
 4. Al confirmar el archivo, la bandeja muestra **Video adjunto**. Si falla
    la carga, se puede reintentar desde la misma pantalla con la postulación

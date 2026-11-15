@@ -1,7 +1,7 @@
 # PCIT-176 · Validación previa a la subida
 
 Al pulsar **Añadir a la cola** con un archivo local en **Analizar video**, el
-navegador lee los metadatos. Se aceptan hasta 60 segundos y se requieren al
+navegador lee los metadatos. Se admiten videos sin tope de duración y se requieren al
 menos 1280 píxeles en el lado largo y 720 en el corto. Si el archivo se rechaza,
 la pantalla explica el motivo y conserva los datos del partido para reemplazar
 el video. El rechazo ocurre antes de transferir el archivo o registrar el partido.
@@ -12,7 +12,7 @@ recursos locales se liberan al terminar o cancelar la lectura.
 
 ## Verificación
 
-Las pruebas cubren los límites de dimensiones y duración, los metadatos
+Las pruebas cubren las dimensiones mínimas, los videos de más de un minuto, los metadatos
 ilegibles, la cancelación y el rechazo sin encolar desde la pantalla. También
 comprueban que un archivo de reemplazo puede enviarse.
 

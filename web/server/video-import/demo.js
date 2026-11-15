@@ -8,7 +8,6 @@ import { EMULATOR_PORTS, EMULATOR_PROJECT_ID } from '../../src/panel/lib/firebas
 import { createApplicationVideoMiddleware, createApplicationVideoStore } from './applicationVideo.js'
 import { createDemoImportStore } from './demoStore.js'
 import { createPublicVideoDownloader } from './download.js'
-import { VideoImportError } from './errors.js'
 import { createVideoImportHttpHandler } from './http.js'
 import { createVideoImporter } from './importer.js'
 import { createLocalVideoProbe } from './probe.js'
@@ -80,11 +79,7 @@ export function demoVideoImport(env) {
         maxConcurrent: 1,
         store: createDemoImportStore({ db, bucket }),
         download: createVideoSourceDownloader({ directDownload, resolveYouTube: createYtDlpResolver({ executable: ytDlp }) }),
-        async probe(input) {
-          const data = await probe(input)
-          if (data.durationSeconds > 30) throw new VideoImportError('duration', 'La demo admite videos de hasta 30 segundos.')
-          return data
-        },
+        probe,
         authorize,
       })
       const handle = createVideoImportHttpHandler({ importVideo, origin })

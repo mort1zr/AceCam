@@ -57,7 +57,7 @@ describe('Analizar video v1', () => {
     render(<Analizar {...setup()} />)
     const input = screen.getByLabelText('Selecciona el video del partido')
     const notice = document.getElementById(input.getAttribute('aria-describedby'))
-    expect(notice.textContent).toContain('MP4 o MOV de hasta 1 minuto')
+    expect(notice.textContent).toContain('MP4 o MOV sin tope de duración')
     expect(notice.textContent).toContain('720p (1280×720) y de 25 a 60 FPS')
     expect(notice.textContent).toContain('1080p a 30 FPS')
     expect(notice.textContent).toContain('con toda la cancha visible y sin cortes')

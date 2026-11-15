@@ -96,9 +96,8 @@ match:
   initial_score: null
 
 worker:
-  # Duración máxima del vídeo que acepta el worker, en segundos. Los más largos pasan a
-  # 'error' antes de cargarlos (PCIT-147). Se puede subir cuando haya procesamiento por tramos.
-  max_duration_seconds: 60
+  # 0 desactiva el tope de duración. El modelo procesa los videos por tramos (PCIT-146).
+  max_duration_seconds: 0
   # Mínimo de 720 píxeles en el lado corto y su equivalente 16:9 en el lado largo (1280).
   # Se admiten ambas orientaciones. El valor 0 desactiva la comprobación de resolución.
   min_resolution: 720
