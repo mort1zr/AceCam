@@ -34,7 +34,7 @@ import { publicFormExists, submitPublicApplication } from '../../src/panel/lib/p
 import { readGoogleFormResponses } from '../../src/panel/lib/googleFormsApplications.js'
 import { importGoogleFormApplications } from '../../src/panel/lib/services/googleFormsRecruitment.js'
 import { savePlatformOrganization } from '../../src/panel/lib/services/platformOrganizations.js'
-import { changePlatformMemberRole } from '../../src/panel/lib/services/platformMembers.js'
+import { changePlatformMemberRole, changePlatformMemberSuspension } from '../../src/panel/lib/services/platformMembers.js'
 
 const ORG = 'org-demo'
 const OTHER_ORG = 'org-club'
@@ -88,6 +88,44 @@ beforeEach(async () => {
 
 const coachDb = () => env.authenticatedContext(COACH, { email: 'coach@acecam.test' }).firestore()
 const anonDb = () => env.unauthenticatedContext().firestore()
+
+it('suspende y reactiva el acceso a los datos con auditoría y conserva la ficha propia', async () => {
+  const uid = 'operador'
+  const id = 'miembro-admin'
+  const platform = env.authenticatedContext(uid).firestore()
+  const member = env.authenticatedContext(id).firestore()
+  await env.withSecurityRulesDisabled(async context => {
+    const db = context.firestore()
+    await Promise.all([
+      setDoc(doc(db, 'platformAdmins', uid), {}),
+      setDoc(doc(db, 'users', id), { orgId: ORG, role: 'admin' }),
+      setDoc(doc(db, 'matches', 'm-ready', 'coachNotes', id), { text: 'Nota privada' }),
+    ])
+  })
+  const org = doc(member, 'orgs', ORG)
+  const match = doc(member, 'matches', 'm-ready')
+  const note = doc(member, 'matches', 'm-ready', 'coachNotes', id)
+  const profile = doc(member, 'users', id)
+  const suspend = { expectedSuspended: false, suspended: true }
+  await assertFails(updateDoc(profile, { suspended: true }))
+  await assertFails(changePlatformMemberSuspension(platform, uid, { id: COACH, ...suspend }))
+  await assertSucceeds(getDoc(note))
+  await changePlatformMemberSuspension(platform, uid, { id, ...suspend })
+  await assertFails(getDoc(org))
+  await assertFails(getDoc(match))
+  await assertFails(getDoc(note))
+  await assertFails(updateDoc(profile, { suspended: false }))
+  const own = (await getDoc(profile)).data()
+  expect(own).toMatchObject({ role: 'admin', orgId: ORG, suspended: true })
+  const audit = (await getDoc(doc(platform, 'platformAudit', own.platformAuditId))).data()
+  expect(audit).toMatchObject({
+    actorId: uid, targetId: id, before: { role: 'admin', suspended: false }, after: { role: 'admin', suspended: true },
+  })
+  await changePlatformMemberSuspension(platform, uid, { id, expectedSuspended: true, suspended: false })
+  await assertSucceeds(getDoc(org))
+  await assertSucceeds(getDoc(match))
+  await assertSucceeds(getDoc(note))
+})
 
 it('cambia el rol de un miembro con auditoría y protege al propietario y a plataforma', async () => {
   const uid = 'admin-plataforma'

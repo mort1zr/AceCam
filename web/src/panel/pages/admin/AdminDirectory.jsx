@@ -6,7 +6,7 @@ import { db } from '../../lib/firebase.js'
 import { loadAdminDirectory } from '../../lib/services/firestoreAdminDirectory.js'
 import { savePlatformOrganization } from '../../lib/services/platformOrganizations.js'
 import AdminInvite from './AdminInvite.jsx'
-import AdminMemberRole from './AdminMemberRole.jsx'
+import AdminMemberActions from './AdminMemberActions.jsx'
 
 const copy = {
   es: {
@@ -15,6 +15,7 @@ const copy = {
     created: 'Fecha de alta', error: 'No pudimos cargar los datos de administración.',
     add: 'Crear organización', edit: 'Editar', archive: 'Archivar', restore: 'Reactivar', status: 'Estado',
     archived: 'Archivada', active: 'Activa', actions: 'Acciones', save: 'Guardar', cancel: 'Cancelar',
+    suspended: 'Suspendido', memberActive: 'Activo',
     confirmArchive: 'Se conservará el historial y se bloquearán las nuevas invitaciones y análisis.',
     confirmRestore: 'La organización podrá volver a invitar y analizar según su plan.',
     saveError: 'No pudimos guardar los cambios. Vuelve a intentarlo.',
@@ -27,6 +28,7 @@ const copy = {
     created: 'Joined on', error: 'We could not load the administration data.',
     add: 'Create organization', edit: 'Edit', archive: 'Archive', restore: 'Reactivate', status: 'Status',
     archived: 'Archived', active: 'Active', actions: 'Actions', save: 'Save', cancel: 'Cancel',
+    suspended: 'Suspended', memberActive: 'Active',
     confirmArchive: 'History is retained and new invitations and analyses are blocked.',
     confirmRestore: 'The organization can invite members and analyze videos again within its plan.',
     saveError: 'We could not save the changes. Try again.',
@@ -109,8 +111,9 @@ export default function AdminDirectory() {
       const created = value?.toDate?.()
       return Number.isFinite(created?.getTime()) ? date.format(created) : '—'
     } },
+    { key: 'suspended', label: t.status, render: value => value ? t.suspended : t.memberActive },
     { key: 'actions', label: t.actions, render: (_, member) => (
-      <AdminMemberRole db={db} uid={user.uid} member={member} labels={t.roles} onSaved={retry} />
+      <AdminMemberActions db={db} uid={user.uid} member={member} labels={t.roles} onSaved={retry} />
     ) },
   ]
 

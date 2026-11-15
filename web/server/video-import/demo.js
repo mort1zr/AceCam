@@ -69,7 +69,7 @@ export function demoVideoImport(env) {
       async function authorize({ bearerToken }) {
         const { uid } = await auth.verifyIdToken(bearerToken)
         const profile = (await db.collection('users').doc(uid).get()).data()
-        if (!profile || !['coach', 'admin'].includes(profile.role)) return null
+        if (!profile || profile.suspended === true || !['coach', 'admin'].includes(profile.role)) return null
         return { orgId: profile.orgId, actorId: uid }
       }
       server.middlewares.use(createApplicationVideoMiddleware({

@@ -87,6 +87,21 @@ const sign = (uid, body) => handler(new Request(`${ORIGIN}/api/videos/sign`, {
 const upload = (signed, data = bytes) => fetch(signed.url, { method: 'PUT', headers: signed.headers, body: data })
 
 describe('videos en Azure Blob con enlaces temporales (PCIT-223)', () => {
+  it('bloquea nuevas firmas de lectura y escritura mientras la cuenta está suspendida', async () => {
+    const profile = db.doc('users/admin-a')
+    const read = { path: PROCESSED, operation: 'read' }
+    const write = { path: NEW_VIDEO, operation: 'upload' }
+    expect((await sign('admin-a', read)).status).toBe(200)
+    await profile.update({ suspended: true })
+    try {
+      expect((await sign('admin-a', read)).status).toBe(403)
+      expect((await sign('admin-a', write)).status).toBe(403)
+    } finally {
+      await profile.update({ suspended: false })
+    }
+    expect((await sign('admin-a', read)).status).toBe(200)
+  })
+
   it('el entrenador sube un video nuevo y luego lo lee con un enlace temporal', async () => {
     const response = await sign('coach-a', { path: NEW_VIDEO, operation: 'upload' })
     expect(response.status).toBe(200)

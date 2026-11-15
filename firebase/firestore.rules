@@ -26,14 +26,10 @@ service cloud.firestore {
       return /databases/$(database)/documents/users/$(uid);
     }
 
-    // orgId del usuario que hace la petición (falla y niega si no tiene ficha).
-    function myOrgId() {
-      return get(userPath(request.auth.uid)).data.orgId;
-    }
-
     function inOrg(orgId) {
-      return signedIn() && orgId is string && myOrgId() == orgId
-        && get(userPath(request.auth.uid)).data.role in ['admin', 'coach'];
+      let profile = get(userPath(request.auth.uid)).data;
+      return signedIn() && orgId is string && profile.orgId == orgId
+        && !profile.get('suspended', false) && profile.role in ['admin', 'coach'];
     }
 
     function isAdmin() {
@@ -178,15 +174,17 @@ service cloud.firestore {
     // Se crea en el registro (PCIT-21), en el mismo lote que su organización.
 
     match /users/{uid} {
-      function auditedRoleChange() {
+      function auditedMemberChange() {
         let next = request.resource.data;
         let entry = /databases/$(database)/documents/platformAudit/$(next.platformAuditId);
         let org = /databases/$(database)/documents/orgs/$(resource.data.orgId);
         return isPlatformAdmin()
           && !exists(/databases/$(database)/documents/platformAdmins/$(uid))
           && exists(org) && get(org).data.get('ownerId', null) != uid
-          && onlyChanges(['role', 'updatedAt', 'platformAuditId'])
-          && next.role in ['coach', 'admin'] && next.role != resource.data.role
+          && ((onlyChanges(['role', 'updatedAt', 'platformAuditId'])
+            && next.role in ['coach', 'admin'] && next.role != resource.data.role)
+            || (onlyChanges(['suspended', 'updatedAt', 'platformAuditId'])
+              && next.suspended is bool && next.suspended != resource.data.get('suspended', false)))
           && next.updatedAt == request.time
           && !exists(entry) && existsAfter(entry)
           && getAfter(entry).data.entity == 'users'
@@ -231,7 +229,7 @@ service cloud.firestore {
         && isText(request.resource.data.displayName, 2, 120)
         && optionalText(request.resource.data, 'jobTitle', 120);
 
-      allow update: if auditedRoleChange();
+      allow update: if auditedMemberChange();
       allow delete: if false;
     }
 
@@ -542,7 +540,7 @@ service cloud.firestore {
           let parent = get(/databases/$(database)/documents/matches/$(matchId)).data;
           let profile = get(userPath(request.auth.uid)).data;
           return request.auth.uid == authorId
-            && parent.orgId is string && profile.orgId == parent.orgId
+            && parent.orgId is string && profile.orgId == parent.orgId && !profile.get('suspended', false)
             && parent.status == 'listo'
             && (profile.role == 'admin' || (profile.role == 'coach' && parent.createdBy == authorId));
         }

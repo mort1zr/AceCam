@@ -10,11 +10,11 @@ export async function loadAdminDirectory(db, period = usagePeriod()) {
   const teams = new Map(organizations.docs.map(doc => [doc.id, doc.data()]))
   const members = new Map()
   const userRows = users.docs.map(doc => {
-    const { email, orgId, role, createdAt } = doc.data()
+    const { email, orgId, role, createdAt, suspended } = doc.data()
     members.set(orgId, (members.get(orgId) ?? 0) + 1)
     const team = teams.get(orgId)
-    return { id: doc.id, email, organization: team?.name || orgId, role, createdAt,
-      roleEditable: Boolean(team) && team.ownerId !== doc.id }
+    return { id: doc.id, email, organization: team?.name || orgId, role, createdAt, suspended: suspended === true,
+      editable: Boolean(team) && team.ownerId !== doc.id }
   })
   const organizationRows = await Promise.all(organizations.docs.map(async doc => {
     const { name, plan, archived } = doc.data()

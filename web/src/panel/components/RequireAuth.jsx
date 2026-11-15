@@ -11,6 +11,16 @@ export default function RequireAuth() {
 
   if (!user) return <Navigate to="/login" replace state={{ from: location }} />
 
+  if (profile?.suspended === true) {
+    return (
+      <div className="grid min-h-dvh place-content-center bg-bg">
+        <ErrorState title="Acceso al equipo suspendido"
+          description="Contacta a un administrador de plataforma para solicitar la reactivación."
+          onRetry={logout} retryLabel="Cerrar sesión" />
+      </div>
+    )
+  }
+
   // Cuenta sin ficha en users: el registro no terminó.
   if (!profile) {
     return (
