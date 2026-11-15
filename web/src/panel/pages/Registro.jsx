@@ -26,6 +26,8 @@ const textos = {
     terminos: 'Términos de uso',
     y: 'y la',
     privacidad: 'Política de privacidad',
+    verify: 'Revisa tu correo y abre el enlace de verificación. Después inicia sesión para unirte al equipo.',
+    signIn: 'Iniciar sesión',
   },
   en: {
     titulo: 'Sign up',
@@ -44,6 +46,8 @@ const textos = {
     terminos: 'Terms of use',
     y: 'and the',
     privacidad: 'Privacy policy',
+    verify: 'Open the verification link in your email, then sign in to join the team.',
+    signIn: 'Sign in',
   },
 }
 
@@ -59,16 +63,23 @@ export default function Registro() {
   const [errors, setErrors] = useState({})
   const [formError, setFormError] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const [verificationPending, setVerificationPending] = useState(false)
   const acceso = useOutletContext()
   const from = useLocation().state?.from
   const destino = from ? `${from.pathname}${from.search ?? ''}` : '/inicio'
   const etiqueta = submitting ? t.cargando : t.boton
 
   useLayoutEffect(() => {
-    acceso?.setBoton({ label: etiqueta, disabled: submitting })
-  }, [acceso, etiqueta, submitting])
+    acceso?.setBoton({ label: etiqueta, disabled: submitting || verificationPending })
+  }, [acceso, etiqueta, submitting, verificationPending])
 
   if (user && profile && !submitting) return <Navigate to={destino} replace />
+  if (verificationPending) return (
+    <section className="grid gap-3">
+      <p role="status">{t.verify}</p>
+      <Link className="underline" to="/login">{t.signIn}</Link>
+    </section>
+  )
 
   const change = event => setValues(current => ({ ...current, [event.target.name]: event.target.value }))
 
@@ -80,7 +91,12 @@ export default function Registro() {
     if (Object.keys(found).length) return
     setSubmitting(true)
     try {
-      await registerCoach({ ...values, invited })
+      const result = await registerCoach({ ...values, invited })
+      if (result?.verificationPending) {
+        setVerificationPending(true)
+        setSubmitting(false)
+        return
+      }
       if (acceso?.entrar) await acceso.entrar(destino)
       else navigate(destino, { replace: true })
     } catch (error) {

@@ -6,6 +6,7 @@
 import {
   createUserWithEmailAndPassword,
   deleteUser,
+  sendEmailVerification,
   signInWithEmailAndPassword,
   signOut,
   updateProfile,
@@ -72,6 +73,8 @@ const ERROR_MESSAGES = {
   'permission-denied': 'No pudimos crear tu organización. Inténtalo de nuevo.',
   'invite/not-found':
     'No encontramos una invitación pendiente para este correo. Pide que te inviten de nuevo o crea tu propia organización.',
+  'invite/verify-email':
+    'Verifica tu correo con el enlace que te enviamos antes de entrar al equipo.',
 }
 
 /** Mensaje para el usuario; nunca muestra el error técnico. */
@@ -119,6 +122,11 @@ export function createAuthService({ auth, db }) {
     try {
       await updateProfile(user, { displayName })
       const invite = await pendingInvite(user)
+      if (invite?.platformAuditId && !user.emailVerified) {
+        await sendEmailVerification(user)
+        await signOut(auth)
+        return { verificationPending: true }
+      }
       if (invite) return await joinInvitedOrg(user, displayName, invite)
       if (invited) throw Object.assign(new Error('Invite not found'), { code: 'invite/not-found' })
       const orgRef = doc(collection(db, COLLECTIONS.orgs))
@@ -146,8 +154,24 @@ export function createAuthService({ auth, db }) {
     }
   }
 
-  const login = ({ email, password }) =>
-    signInWithEmailAndPassword(auth, normalizeEmail(email), password)
+  async function login({ email, password }) {
+    const credentials = await signInWithEmailAndPassword(auth, normalizeEmail(email), password)
+    const { user } = credentials
+    try {
+      const profile = await getDoc(doc(db, COLLECTIONS.users, user.uid))
+      if (!profile.exists()) {
+        const invite = await pendingInvite(user)
+        if (invite?.platformAuditId) {
+          if (!user.emailVerified) throw Object.assign(new Error('Email verification required'), { code: 'invite/verify-email' })
+          await joinInvitedOrg(user, clean(user.displayName).slice(0, MAX_TEXT_LENGTH) || 'Miembro del equipo', invite)
+        }
+      }
+      return credentials
+    } catch (error) {
+      await signOut(auth)
+      throw error
+    }
+  }
 
   const logout = () => signOut(auth)
 

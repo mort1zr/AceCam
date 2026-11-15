@@ -309,25 +309,46 @@ service cloud.firestore {
     // la persona invitada solo lee la suya y la acepta al registrarse.
 
     match /invites/{email} {
+      function validNewInvite() {
+        let data = request.resource.data;
+        return !get(/databases/$(database)/documents/orgs/$(data.orgId)).data.get('archived', false)
+          && data.email == email
+          && email.matches('^[^@ /A-Z]+@[^@ /A-Z]+[.][^@ /A-Z]+$')
+          && email != request.auth.token.email
+          && data.role in ['coach', 'admin']
+          && data.status == 'pendiente'
+          && data.invitedBy == request.auth.uid
+          && data.createdAt == request.time;
+      }
+
+      function auditedPlatformInvite() {
+        let id = request.resource.data.platformAuditId;
+        let entry = /databases/$(database)/documents/platformAudit/$(id);
+        return isPlatformAdmin() && !exists(entry) && existsAfter(entry)
+          && getAfter(entry).data.entity == 'invites'
+          && getAfter(entry).data.targetId == email;
+      }
+
       allow get: if signedIn()
         && (email == request.auth.token.email || (resource != null && canInvite(resource.data.orgId)));
       allow list: if canInvite(resource.data.orgId);
 
       allow create: if canInvite(request.resource.data.orgId)
-        && !get(/databases/$(database)/documents/orgs/$(request.resource.data.orgId)).data.get('archived', false)
         && request.resource.data.keys().hasOnly(['email', 'orgId', 'role', 'status', 'invitedBy', 'createdAt'])
-        && request.resource.data.email == email
-        && email.matches('^[^@ A-Z]+@[^@ A-Z]+[.][^@ A-Z]+$')
-        && email != request.auth.token.email
-        && request.resource.data.role in ['coach', 'admin']
-        && request.resource.data.status == 'pendiente'
-        && request.resource.data.invitedBy == request.auth.uid
-        && request.resource.data.createdAt == request.time;
+        && validNewInvite();
+
+      allow create: if auditedPlatformInvite() && validNewInvite()
+        && request.resource.data.keys().hasOnly(['email', 'orgId', 'role', 'status', 'invitedBy', 'createdAt', 'platformAuditId']);
 
       // Aceptar: solo la persona invitada, en el mismo lote que crea su ficha en users.
       allow update: if signedIn()
         && email == request.auth.token.email
         && resource.data.status == 'pendiente'
+        && (!('platformAuditId' in resource.data) || (
+          request.auth.token.email_verified == true
+          && !exists(userPath(request.auth.uid))
+          && !get(/databases/$(database)/documents/orgs/$(resource.data.orgId)).data.get('archived', false)
+        ))
         && onlyChanges(['status', 'acceptedBy', 'acceptedAt'])
         && request.resource.data.status == 'aceptada'
         && request.resource.data.acceptedBy == request.auth.uid

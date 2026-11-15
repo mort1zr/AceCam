@@ -2,11 +2,12 @@
 // con las reglas reales de firestore.rules. Ejecutar con: npm run test:rules
 
 import { deleteApp, initializeApp } from 'firebase/app'
-import { connectAuthEmulator, getAuth } from 'firebase/auth'
-import { connectFirestoreEmulator, doc, getDoc, getFirestore } from 'firebase/firestore'
+import { assertFails, initializeTestEnvironment } from '@firebase/rules-unit-testing'
+import { applyActionCode, connectAuthEmulator, getAuth } from 'firebase/auth'
+import { connectFirestoreEmulator, doc, getDoc, getFirestore, serverTimestamp, setDoc, writeBatch } from 'firebase/firestore'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { createAuthService } from '../../src/panel/lib/auth.js'
-import { invitarMiembro } from '../../src/panel/lib/invitaciones.js'
+import { invitarDesdePlataforma, invitarMiembro } from '../../src/panel/lib/invitaciones.js'
 
 const PROJECT = process.env.ACECAM_RULES_PROJECT || 'demo-acecam'
 const HOST = '127.0.0.1'
@@ -84,4 +85,58 @@ describe('registro con invitación (PCIT-40)', () => {
     // La cuenta se borró: puede registrarse con su propia organización.
     await expect(service.registerCoach({ ...sinInvitacion, invited: false, orgName: 'Club Propio' })).resolves.toMatchObject({ joined: false })
   })
+})
+
+it('incorpora al primer administrador con invitación de plataforma auditada y correo verificado', async () => {
+  const env = await initializeTestEnvironment({
+    projectId: PROJECT,
+    firestore: { host: HOST, port: Number(process.env.FIRESTORE_EMULATOR_HOST?.split(':').at(-1) || 8080) },
+  })
+  const uid = 'operador-invitaciones'
+  const orgId = 'organizacion-sin-miembros'
+  const email = 'primer-admin@acecam.test'
+  const invited = { name: 'Primera Administradora', email, password: 'acecam123', invited: true }
+  const platform = env.authenticatedContext(uid, { email: 'operador@acecam.test' }).firestore()
+  try {
+    await env.withSecurityRulesDisabled(async context => {
+      const admin = context.firestore()
+      await setDoc(doc(admin, 'platformAdmins', uid), {})
+      await setDoc(doc(admin, 'orgs', orgId), { name: 'Club Nuevo', ownerId: null, plan: 'free', archived: false })
+    })
+    const request = { db: platform, uid, orgId, email, role: 'admin' }
+    await expect(invitarDesdePlataforma(request)).resolves.toBe(email)
+    await assertFails(invitarDesdePlataforma(request))
+    await assertFails(invitarDesdePlataforma({ ...request, orgId: 'no-existe', email: 'otro@acecam.test' }))
+    await assertFails(invitarDesdePlataforma({
+      ...request, uid: 'externo', db: env.authenticatedContext('externo').firestore(), email: 'fuera@acecam.test',
+    }))
+
+    const unverified = env.authenticatedContext('sin-verificar', { email, email_verified: false }).firestore()
+    const join = writeBatch(unverified)
+    join.set(doc(unverified, 'users', 'sin-verificar'), {
+      email, orgId, role: 'admin', displayName: 'Sin verificar', createdAt: serverTimestamp(),
+    })
+    join.update(doc(unverified, 'invites', email), {
+      status: 'aceptada', acceptedBy: 'sin-verificar', acceptedAt: serverTimestamp(),
+    })
+    await assertFails(join.commit())
+
+    await service.logout()
+    await expect(service.registerCoach(invited)).resolves.toEqual({ verificationPending: true })
+    expect(auth.currentUser).toBeNull()
+    await expect(service.login(invited)).rejects.toMatchObject({ code: 'invite/verify-email' })
+    const authHost = process.env.FIREBASE_AUTH_EMULATOR_HOST || `${HOST}:9099`
+    const response = await fetch(`http://${authHost}/emulator/v1/projects/${PROJECT}/oobCodes`)
+    const { oobCodes } = await response.json()
+    const verification = oobCodes.find(code => code.email === email && code.requestType === 'VERIFY_EMAIL')
+    await applyActionCode(auth, verification.oobCode)
+    const { user } = await service.login(invited)
+    expect((await getDoc(doc(db, 'users', user.uid))).data()).toMatchObject({ orgId, role: 'admin' })
+    const invitation = (await getDoc(doc(db, 'invites', email))).data()
+    expect(invitation).toMatchObject({ status: 'aceptada', acceptedBy: user.uid })
+    const audit = (await getDoc(doc(platform, 'platformAudit', invitation.platformAuditId))).data()
+    expect(audit).toMatchObject({ actorId: uid, before: null, after: { orgId, role: 'admin', status: 'pendiente' } })
+  } finally {
+    await env.cleanup()
+  }
 })

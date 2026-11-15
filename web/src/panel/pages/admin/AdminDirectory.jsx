@@ -5,6 +5,7 @@ import { useAuth } from '../../context/AuthContext.js'
 import { db } from '../../lib/firebase.js'
 import { loadAdminDirectory } from '../../lib/services/firestoreAdminDirectory.js'
 import { savePlatformOrganization } from '../../lib/services/platformOrganizations.js'
+import AdminInvite from './AdminInvite.jsx'
 
 const copy = {
   es: {
@@ -139,6 +140,7 @@ export default function AdminDirectory() {
         </form>
       )}
       <DataTable caption={t.organizations} columns={organizations} rows={result?.organizations} loading={!result} />
+      {result && <AdminInvite db={db} uid={user.uid} organizations={result.organizations} />}
       <DataTable caption={t.users} columns={users} rows={result?.users} loading={!result} />
     </div>
   )
