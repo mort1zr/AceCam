@@ -33,6 +33,7 @@ import { usagePeriod } from '../../src/panel/lib/usage.js'
 import { publicFormExists, submitPublicApplication } from '../../src/panel/lib/publicApplications.js'
 import { readGoogleFormResponses } from '../../src/panel/lib/googleFormsApplications.js'
 import { importGoogleFormApplications } from '../../src/panel/lib/services/googleFormsRecruitment.js'
+import { savePlatformOrganization } from '../../src/panel/lib/services/platformOrganizations.js'
 
 const ORG = 'org-demo'
 const OTHER_ORG = 'org-club'
@@ -86,6 +87,39 @@ beforeEach(async () => {
 
 const coachDb = () => env.authenticatedContext(COACH, { email: 'coach@acecam.test' }).firestore()
 const anonDb = () => env.unauthenticatedContext().firestore()
+
+it('gestiona las organizaciones con auditoría y conserva el historial al archivar', async () => {
+  const uid = 'operador'
+  const platform = env.authenticatedContext(uid).firestore()
+  await env.withSecurityRulesDisabled(async context => setDoc(doc(context.firestore(), 'platformAdmins', uid), {}))
+  const id = await savePlatformOrganization(platform, uid, { name: 'Club Nuevo', plan: 'free' })
+  const organization = doc(platform, 'orgs', id)
+  expect((await getDoc(organization)).data()).toMatchObject({ name: 'Club Nuevo', plan: 'free', archived: false })
+  await assertFails(updateDoc(organization, { name: 'Cambio sin bitácora' }))
+  await assertFails(savePlatformOrganization(coachDb(), COACH, { name: 'Club sin permiso', plan: 'free' }))
+  await savePlatformOrganization(platform, uid, { id, name: 'Club Actualizado', plan: 'pro' })
+  const updated = (await getDoc(organization)).data()
+  expect(updated).toMatchObject({ name: 'Club Actualizado', plan: 'pro' })
+  expect((await getDoc(doc(platform, 'platformAudit', updated.platformAuditId))).data()).toMatchObject({
+    actorId: uid, entity: 'orgs', targetId: id, before: { name: 'Club Nuevo', plan: 'free', archived: false },
+    after: { name: 'Club Actualizado', plan: 'pro', archived: false },
+  })
+  const invite = doc(coachDb(), 'invites', 'nuevo@example.test')
+  const inviteFields = {
+    email: invite.id, orgId: ORG, role: 'coach', status: 'pendiente', invitedBy: COACH, createdAt: serverTimestamp(),
+  }
+  await savePlatformOrganization(platform, uid, { id: ORG, archived: true })
+  await assertFails(setDoc(invite, inviteFields))
+  await assertFails(createMatch(coachDb(), 'm-nuevo-archivado'))
+  const legacyMatch = doc(coachDb(), 'matches', 'm-error')
+  expect((await getDoc(legacyMatch)).exists()).toBe(true)
+  const retry = { status: 'en cola', errorMessage: null, updatedAt: serverTimestamp() }
+  await assertFails(updateDoc(legacyMatch, retry))
+  await savePlatformOrganization(platform, uid, { id: ORG, archived: false })
+  await assertSucceeds(setDoc(invite, inviteFields))
+  await assertSucceeds(updateDoc(legacyMatch, retry))
+  await assertSucceeds(createMatch(coachDb(), 'm-nuevo-reactivado'))
+})
 
 it('restringe la auditoría a plataforma y rechaza entradas sueltas y cambios retroactivos', async () => {
   const uid = 'auditor-plataforma'

@@ -15,11 +15,11 @@ export async function loadAdminDirectory(db, period = usagePeriod()) {
     return { id: doc.id, email, organization: organizationNames.get(orgId) || orgId, role, createdAt }
   })
   const organizationRows = await Promise.all(organizations.docs.map(async doc => {
-    const { name, plan } = doc.data()
+    const { name, plan, archived } = doc.data()
     const usage = await getDocFromServer(usageRef(db, doc.id, period))
     const analyses = usage.data()?.analyses
     return {
-      id: doc.id, name: name || doc.id, plan, members: members.get(doc.id) ?? 0,
+      id: doc.id, name: name || doc.id, plan, archived: archived === true, members: members.get(doc.id) ?? 0,
       analyses: usage.exists() ? (Number.isSafeInteger(analyses) && analyses >= 0 ? analyses : null) : 0,
     }
   }))

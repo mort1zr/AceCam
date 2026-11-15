@@ -73,6 +73,7 @@ export function analysisErrorMessage(error) {
   if (error?.name === 'AbortError') return 'Carga cancelada antes de crear el partido. Puedes volver a intentarlo.'
   if (Object.hasOwn(VIDEO_IMPORT_MESSAGES, error?.code)) return VIDEO_IMPORT_MESSAGES[error.code]
   if (error?.code === 'analysis/player') return 'El jugador ya no está disponible en tu organización. Actualiza la lista.'
+  if (error?.code === 'analysis/archived') return 'La organización está archivada. Pide a un administrador de plataforma que la reactive.'
   if (error?.code === 'analysis/validation') return 'Revisa los datos y el video antes de continuar.'
   if (error?.code === 'analysis/video-path') return 'La ruta del video no corresponde a este partido. Vuelve a intentar la carga.'
   if (error?.code === 'analysis/limit') return error.limit

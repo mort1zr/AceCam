@@ -5,6 +5,7 @@ import { isStorageVideoPath } from '../videoImportProtocol.js'
 import { planVigente } from '../planes.js'
 
 export function checkQuota(org, counter) {
+  if (org.data()?.archived === true) throw Object.assign(new Error('Organization archived'), { code: 'analysis/archived' })
   // Una prueba vencida no tiene análisis (PCIT-170), igual que withinPlan en las reglas.
   const limit = planLimit(org.exists() ? planVigente(org.data()) : null)
   const used = counter.exists() ? counter.data().analyses : 0

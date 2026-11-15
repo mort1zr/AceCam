@@ -106,7 +106,7 @@ service cloud.firestore {
     function withinPlan(orgId, analyses) {
       let org = get(/databases/$(database)/documents/orgs/$(orgId)).data;
       let plan = org.get('plan', 'free');
-      return !trialExpired(org)
+      return !org.get('archived', false) && !trialExpired(org)
         && (plan == 'ultra'
           || analyses <= {'prueba': 15, 'basico': 30, 'pro': 150}.get(plan, 0));
     }
@@ -222,8 +222,35 @@ service cloud.firestore {
     // ---------- orgs/{orgId} ----------
 
     match /orgs/{orgId} {
+      function auditedOrganization() {
+        let next = request.resource.data;
+        let entry = /databases/$(database)/documents/platformAudit/$(next.platformAuditId);
+        return isPlatformAdmin()
+          && isText(next.name, 2, 120)
+          && next.plan in ['free', 'prueba', 'basico', 'pro', 'ultra']
+          && next.archived is bool
+          && !exists(entry) && existsAfter(entry)
+          && getAfter(entry).data.entity == 'orgs'
+          && getAfter(entry).data.targetId == orgId;
+      }
+
       allow get: if isPlatformAdmin() || inOrg(orgId);
       allow list: if isPlatformAdmin();
+
+      allow create: if auditedOrganization()
+        && request.resource.data.keys().hasOnly(['name', 'plan', 'archived', 'ownerId', 'createdAt', 'planSince', 'platformAuditId'])
+        && request.resource.data.ownerId == null && !request.resource.data.archived
+        && request.resource.data.createdAt == request.time
+        && (request.resource.data.plan == 'free'
+          ? request.resource.data.get('planSince', null) == null
+          : request.resource.data.planSince == request.time);
+
+      allow update: if auditedOrganization()
+        && onlyChanges(['name', 'plan', 'archived', 'updatedAt', 'planSince', 'platformAuditId'])
+        && request.resource.data.updatedAt == request.time
+        && (request.resource.data.plan == resource.data.plan
+          ? unchanged(['planSince'])
+          : request.resource.data.planSince == request.time);
 
       // Se crea en el registro, junto con la ficha del usuario que la crea.
       allow create: if signedIn()
@@ -287,6 +314,7 @@ service cloud.firestore {
       allow list: if canInvite(resource.data.orgId);
 
       allow create: if canInvite(request.resource.data.orgId)
+        && !get(/databases/$(database)/documents/orgs/$(request.resource.data.orgId)).data.get('archived', false)
         && request.resource.data.keys().hasOnly(['email', 'orgId', 'role', 'status', 'invitedBy', 'createdAt'])
         && request.resource.data.email == email
         && email.matches('^[^@ A-Z]+@[^@ A-Z]+[.][^@ A-Z]+$')
@@ -463,6 +491,7 @@ service cloud.firestore {
       // …o reintentar un partido con error (botón Reintentar).
       allow update: if canManage(resource.data)
         && resource.data.status == 'error'
+        && !get(/databases/$(database)/documents/orgs/$(resource.data.orgId)).data.get('archived', false)
         && request.resource.data.status == 'en cola'
         && request.resource.data.get('errorMessage', null) == null
         && request.resource.data.get('statistics', null) == null
