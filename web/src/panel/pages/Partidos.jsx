@@ -1,10 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { DataTable, EmptyState } from '../components/ui'
 import Marcador from '../components/players/Marcador.jsx'
 import PaginacionTabla, { tamanosPagina } from '../components/ui/PaginacionTabla.jsx'
 import { EsqueletoTabla } from '../components/dashboard/EsqueletoDashboard.jsx'
 import '../components/dashboard/esqueleto.css'
-import MatchReport from '../components/analysis/MatchReport.jsx'
 import { useAnalysisQueue } from '../hooks/useAnalysisQueue.js'
 import { usePlayers } from '../hooks/usePlayers.js'
 import { useNombreOrganizacion } from '../hooks/useNombreOrganizacion.js'
@@ -16,6 +15,8 @@ import { createAzureProcessedVideoService } from '../lib/azureVideos.js'
 import { createProcessedVideoService } from '../lib/services/processedVideoService.js'
 import './jugadores.css'
 import PelotaTitulo from '../components/layout/PelotaTitulo.jsx'
+
+const MatchReport = lazy(() => import('../components/analysis/MatchReport.jsx'))
 
 function matchesErrorMessage(error) {
   if (error?.code === 'permission-denied' || error?.code === 'unauthenticated') {
@@ -43,7 +44,7 @@ function MatchesList({ matchesService, playersService, notesService, videoServic
     { key: 'tournament', label: 'Torneo', render: value => value || '—' },
     { key: 'result', label: 'Marcador', render: value => <Marcador value={value} /> },
     {
-      key: 'report', label: 'Reporte', align: 'right',
+      key: 'report', label: 'Reporte', align: 'right', action: true,
       render: (_, match) => (
         <button
           type="button"
@@ -86,23 +87,25 @@ function MatchesList({ matchesService, playersService, notesService, videoServic
   }
 
   if (selectedMatch) return (
-    <MatchReport
-      key={selectedMatch.id}
-      match={selectedMatch}
-      playerName={playerNames.get(selectedMatch.playerId) || 'Jugador no disponible'}
-      notesService={notesService}
-      videoService={videoService}
-      organizacion={organizacion}
-      onBack={() => setMatchId('')}
-    />
+    <Suspense fallback={null}>
+      <MatchReport
+        key={selectedMatch.id}
+        match={selectedMatch}
+        playerName={playerNames.get(selectedMatch.playerId) || 'Jugador no disponible'}
+        notesService={notesService}
+        videoService={videoService}
+        organizacion={organizacion}
+        onBack={() => setMatchId('')}
+      />
+    </Suspense>
   )
 
   return (
     <>
       {!loading && !error && (matches.rows.length > 0 || filtered) && (
         <>
-          <div className="mt-5 grid grid-cols-[repeat(auto-fit,minmax(min(100%,11rem),1fr))] items-end gap-3" role="group" aria-label="Filtros de partidos">
-            <div className="players-field">
+          <div className="mt-5 grid grid-cols-2 items-end gap-3 sm:grid-cols-[repeat(auto-fit,minmax(min(100%,11rem),1fr))]" role="group" aria-label="Filtros de partidos">
+            <div className="players-field col-span-2 sm:col-span-1">
               <label htmlFor="matches-player">Jugador</label>
               <select id="matches-player" value={playerId} onChange={event => { setPlayerId(event.target.value); setPage(1) }}>
                 <option value="">Todos los jugadores</option>
@@ -118,7 +121,7 @@ function MatchesList({ matchesService, playersService, notesService, videoServic
               <label htmlFor="matches-end">Hasta</label>
               <input id="matches-end" type="date" value={end} aria-invalid={invalidRange} aria-describedby={invalidRange ? 'matches-range-error' : undefined} onChange={event => { setEnd(event.target.value); setPage(1) }} />
             </div>
-            <button type="button" className="players-button-secondary" disabled={!filtered} onClick={clearFilters}>Limpiar filtros</button>
+            <button type="button" className="players-button-secondary players-button-limpiar col-span-2 sm:col-span-1" disabled={!filtered} onClick={clearFilters}>Limpiar filtros</button>
           </div>
           {invalidRange && <p id="matches-range-error" className="players-field-error" role="alert">La fecha inicial debe ser anterior o igual a la final.</p>}
         </>
@@ -129,6 +132,7 @@ function MatchesList({ matchesService, playersService, notesService, videoServic
           {!error && loading ? <EsqueletoTabla etiqueta="partidos" /> : (
             <DataTable
               resizable
+              cards
               caption="Partidos analizados"
               columns={columns}
               rows={visibleRows}

@@ -31,6 +31,19 @@ export default defineConfig(async ({ command, mode, isPreview }) => {
       // PCIT-198: la versión (commit) del build queda en el HTML publicado.
       versionPlugin(),
     ],
+    build: {
+      rolldownOptions: {
+        output: {
+          codeSplitting: {
+            groups: [
+              { name: 'react', test: /node_modules[\\/](react|react-dom|scheduler|react-router)[\\/]/ },
+              { name: 'firebase-auth', test: /node_modules[\\/](@firebase[\\/](app|auth|component|logger|util)|idb)[\\/]/ },
+              { name: 'recharts', test: /node_modules[\\/]recharts[\\/]/ },
+            ],
+          },
+        },
+      },
+    },
     test: {
       // Las pruebas de tests/ necesitan los emuladores: van aparte con `npm run test:rules`.
       exclude: [...configDefaults.exclude, 'tests/**'],

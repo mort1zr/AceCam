@@ -13,7 +13,7 @@ export const PLANES_VISTA = [
   { id: 'ultra', nombre: 'Ultra', corto: 'U' },
 ]
 
-export const SECCIONES_POR_PLAN = {
+const SECCIONES_POR_PLAN = {
   comparador: ['pro', 'ultra'],
   reclutamiento: ['pro', 'ultra'],
 }

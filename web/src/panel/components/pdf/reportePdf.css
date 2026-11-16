@@ -488,13 +488,6 @@
   line-height: 1;
 }
 
-.rp-movimiento {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  align-items: center;
-  gap: 10px;
-}
-
 .rp-rival {
   margin: 0;
   font-family: 'Barlow Condensed', sans-serif;

@@ -2,7 +2,7 @@ import { isValidBirthDate } from './players.js'
 import { VIDEO_IMPORT_MESSAGES } from './videoImportProtocol.js'
 import { parseVideoSource, parseYouTubeUrl } from './videoSources.js'
 
-export const VIDEO_EXTENSIONS = ['mp4', 'mov']
+const VIDEO_EXTENSIONS = ['mp4', 'mov']
 
 export function validateVideoFile(file, maxBytes) {
   if (!file) return 'Selecciona un video.'

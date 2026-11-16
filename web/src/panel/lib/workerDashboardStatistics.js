@@ -1,6 +1,5 @@
 import { DASHBOARD_STATISTICS_SCHEMA, normalizeDashboardStatistics } from './dashboardOverview.js'
-
-export const WORKER_MATCH_STATS_VERSION = 'acecam.match-stats.v1'
+import { MATCH_STATS_VERSION } from './schema.js'
 
 const has = (object, key) => object != null && Object.prototype.hasOwnProperty.call(object, key)
 
@@ -12,7 +11,7 @@ const has = (object, key) => object != null && Object.prototype.hasOwnProperty.c
  */
 export function decodeWorkerDashboardStatistics(match, { playerId }) {
   const statistics = match?.statistics
-  if (match?.playerId !== playerId || statistics?.schemaVersion !== WORKER_MATCH_STATS_VERSION) return null
+  if (match?.playerId !== playerId || statistics?.schemaVersion !== MATCH_STATS_VERSION) return null
   const shots = statistics.player?.shots
   const serve = statistics.player?.serve
   if (!shots && !serve) return null
@@ -37,7 +36,7 @@ export function reportMetrics(match) {
   const statistics = normalizeDashboardStatistics(decodeWorkerDashboardStatistics(match, { playerId }), playerId)
   const shots = statistics?.shots
   const max = shots && match.statistics.player.shots.maxSpeedKmh
-  const available = match.statistics?.schemaVersion === WORKER_MATCH_STATS_VERSION
+  const available = match.statistics?.schemaVersion === MATCH_STATS_VERSION
   const movement = available ? match.statistics.player?.movement : null
   const serve = available ? match.statistics.player?.serve : null
   const rallies = available ? match.statistics.rallies : null

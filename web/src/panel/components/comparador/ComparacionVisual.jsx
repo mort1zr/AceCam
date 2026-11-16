@@ -135,7 +135,7 @@ export function TablaComparacion({ caption, columnas }) {
 export function MarcoComparacion({ n, cabeceras, children }) {
   const id = useId()
   return (
-    <div className="cmp-marco" style={{ '--n': n }} aria-labelledby={id}>
+    <div className="cmp-marco" data-n={n} style={{ '--n': n }} aria-labelledby={id}>
       <span id={id} className="sr-only">Comparación</span>
       <div className="cmp-barra" aria-hidden="true">
         {Array.from({ length: n }, (_, i) => (

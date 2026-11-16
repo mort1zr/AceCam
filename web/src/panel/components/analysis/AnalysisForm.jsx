@@ -22,6 +22,9 @@ export default function AnalysisForm({ service, players, playersLoading, players
   const formRef = useRef(null)
   const noticeRef = useRef(null)
   const playerSelect = useRef(null)
+  const fileCheck = useRef(0)
+  const verifiedFile = useRef(null)
+  const [fileChecking, setFileChecking] = useState(false)
 
   useEffect(() => { request.current = null; if (playerId) playerSelect.current?.focus() }, [playerId])
 
@@ -36,6 +39,28 @@ export default function AnalysisForm({ service, players, playersLoading, players
     setFailure(null)
     setValues(previous => field === 'sourceType' ? { ...previous, sourceType: value, file: null, url: '' } : { ...previous, [field]: value })
     setErrors(previous => field === 'sourceType' ? { ...previous, file: undefined, url: undefined } : { ...previous, [field]: undefined })
+  }
+
+  async function pickFile(file) {
+    const token = ++fileCheck.current
+    change('file', file)
+    setFileChecking(false)
+    if (!file) return
+    setFileChecking(true)
+    let error = null
+    try {
+      error = await validateLocalVideo(file, new AbortController().signal)
+    } catch {
+      error = null
+    }
+    if (!active.current || token !== fileCheck.current) return
+    setFileChecking(false)
+    if (!error) verifiedFile.current = file
+    if (error) {
+      setValues(previous => ({ ...previous, file: null }))
+      setErrors(previous => ({ ...previous, file: error }))
+      if (fileInput.current) fileInput.current.value = ''
+    }
   }
 
   async function submit(event) {
@@ -58,7 +83,7 @@ export default function AnalysisForm({ service, players, playersLoading, players
     try {
       if (input.sourceType === 'file') {
         setProgress({ phase: 'checking', percent: 0 })
-        const error = await validateLocalVideo(input.file, transfer.signal)
+        const error = verifiedFile.current === input.file ? null : await validateLocalVideo(input.file, transfer.signal)
         transfer.signal.throwIfAborted()
         if (!active.current) return
         if (error) {
@@ -118,8 +143,8 @@ export default function AnalysisForm({ service, players, playersLoading, players
                 {' '}Recomendamos 1080p a 30 FPS. Graba con cámara fija detrás de la línea de fondo, con toda la cancha visible y sin cortes.
               </p>
               <label htmlFor={`${id}-file`} className="analysis-file-button">Elegir archivo</label>
-              <input ref={fileInput} id={`${id}-file`} name="file" type="file" className="analysis-file-input" accept=".mp4,.mov,video/mp4,video/quicktime" onChange={event => change('file', event.target.files?.[0] ?? null)} {...invalid('file', `${id}-file-requirements`)} />
-              {values.file && <p className="analysis-selected-file">{values.file.name} · {formatBytes(values.file.size)}</p>}
+              <input ref={fileInput} id={`${id}-file`} name="file" type="file" className="analysis-file-input" accept=".mp4,.mov,video/mp4,video/quicktime" onChange={event => pickFile(event.target.files?.[0] ?? null)} {...invalid('file', `${id}-file-requirements`)} />
+              {values.file && <p className="analysis-selected-file">{values.file.name} · {formatBytes(values.file.size)}{fileChecking && ' · Verificando video…'}</p>}
               {fieldError('file')}
             </div>
           ) : (

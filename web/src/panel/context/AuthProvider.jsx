@@ -36,7 +36,7 @@ export default function AuthProvider({ children }) {
       stopProfile = () => {
         activo = false
       }
-      Promise.all([import('firebase/firestore'), cargarDb()]).then(([{ doc, onSnapshot }, db]) => {
+      import('../lib/firebase.js').then(({ doc, onSnapshot, db }) => {
         if (!activo) return
         // Se escucha la ficha porque en el registro la sesión empieza antes de que exista.
         stopProfile = onSnapshot(

@@ -89,6 +89,7 @@ function CambiarEstado({ application, onSave }) {
           )
         })}
       </div>
+      <p className="rec-nota rec-ayuda">Solo se puede avanzar al siguiente estado</p>
       {elegido && (
         <div className="rec-guardar">
           <p>Pasar a <strong>{elegido}</strong>. No se puede deshacer.</p>

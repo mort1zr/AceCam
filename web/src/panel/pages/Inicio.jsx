@@ -402,10 +402,10 @@ function Bienvenida({ t, nombre, resumen, ahora, cargando = false }) {
           </p>
         )}
       </div>
-      <div className="flex flex-wrap gap-2.5">
+      <div className="grid w-full grid-cols-2 gap-2.5 sm:flex sm:w-auto sm:flex-wrap">
         <Link
           to="/analizar"
-          className={`${boton} border-accent-line bg-accent text-on-accent hover:opacity-90`}
+          className={`${boton} col-span-2 border-accent-line bg-accent text-on-accent hover:opacity-90 sm:col-span-1`}
         >
           <Trazo>
             <path d="M12 15V4" />
@@ -472,7 +472,7 @@ function Tarjetas({ t, resumen, ahora }) {
             >
               {vacio ? 0 : <Cifra valor={dato.valor} formato={Math.round} />}
             </p>
-            <p className="w-full truncate text-[10.5px] font-semibold text-muted md:hidden">
+            <p className="w-full truncate text-xs font-semibold text-text2 md:hidden">
               {t.cortas[indice]}
             </p>
             <p className="text-[13px] text-muted max-md:hidden">
@@ -605,29 +605,31 @@ function Analisis({ t, filas }) {
           {filas.map((partido) => {
             const nombre = `${partido.player} vs. ${partido.opponent}`
             return (
-              <li key={partido.id} className={fila}>
+              <li key={partido.id} className={`${fila} max-sm:flex-wrap`}>
                 <span className="grid size-11 shrink-0 place-items-center rounded-[10px] border border-line bg-surface2 text-accent-ink">
                   <Trazo strokeWidth={1.8}>
                     <rect x="3" y="5" width="13" height="14" rx="2" />
                     <path d="M16 10l5-3v10l-5-3" />
                   </Trazo>
                 </span>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate font-semibold">{nombre}</p>
-                  <p className="truncate text-[13px] text-muted">
+                <div className="min-w-0 flex-1 max-sm:basis-[calc(100%-3.5rem)]">
+                  <p className="font-semibold break-words sm:truncate">{nombre}</p>
+                  <p className="text-[13px] break-words text-muted sm:truncate">
                     {partido.tournament} · {fechaCorta(partido.date, t.locale)}
                   </p>
                 </div>
-                <span className="font-display text-lg font-bold whitespace-nowrap">
-                  {partido.score}
-                </span>
-                <Link
-                  to="/partidos"
-                  aria-label={t.reporteDe(nombre)}
-                  className={`${botonNormal} min-h-9.5 px-3 text-[13px]`}
-                >
-                  {t.reporte}
-                </Link>
+                <div className="flex w-full items-center justify-between gap-3 max-sm:pl-14 sm:contents">
+                  <span className="font-display text-lg font-bold whitespace-nowrap">
+                    {partido.score}
+                  </span>
+                  <Link
+                    to="/partidos"
+                    aria-label={t.reporteDe(nombre)}
+                    className={`${botonNormal} min-h-9.5 px-3 text-[13px] max-sm:min-h-11`}
+                  >
+                    {t.reporte}
+                  </Link>
+                </div>
               </li>
             )
           })}

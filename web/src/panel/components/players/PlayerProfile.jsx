@@ -159,6 +159,7 @@ export default function PlayerProfile({ service, player, onBack, roster = [], ra
         <h2>Partidos analizados</h2>
         {history === null ? <EsqueletoTabla etiqueta="partidos" /> : <DataTable
           resizable
+          cards
           caption="Historial de partidos analizados"
           columns={matchColumns}
           rows={visibleRows}

@@ -1,8 +1,8 @@
-export const THEME_KEY = 'acecam-theme'
+const THEME_KEY = 'acecam-theme'
 export const DARK = 'dark'
 export const LIGHT = 'light'
 
-export function readStoredTheme() {
+function readStoredTheme() {
   try {
     const stored = localStorage.getItem(THEME_KEY)
     return stored === LIGHT || stored === DARK ? stored : null

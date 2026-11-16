@@ -5,7 +5,7 @@ import { buildDashboardPeriods } from '../dashboardPeriods.js'
 import { buildDashboardDetails } from '../dashboardDetails.js'
 import { decodeWorkerDashboardStatistics } from '../workerDashboardStatistics.js'
 
-export function combinarMetricas(overview, details) {
+function combinarMetricas(overview, details) {
   return {
     ...overview.metrics,
     maxShotSpeed: details.shots.maxSpeedKmh,

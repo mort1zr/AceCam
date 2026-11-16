@@ -1,4 +1,4 @@
-export function TrazoVacio({ children, size = 22 }) {
+function TrazoVacio({ children, size = 22 }) {
   return (
     <svg
       width={size}

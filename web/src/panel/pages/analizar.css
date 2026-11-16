@@ -103,6 +103,7 @@
   accent-color: #40d9f6;
 }
 
+.analysis-processing-percent { display: block; margin: 0.3rem 0; color: var(--players-text, inherit); font-size: 0.8125rem; font-variant-numeric: tabular-nums; }
 .analysis-processing-bar {
   height: 0.25rem;
   margin-bottom: 0.35rem;

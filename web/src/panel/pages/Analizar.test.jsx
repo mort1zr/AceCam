@@ -108,7 +108,8 @@ describe('Analizar video v1', () => {
     act(() => receiveMatches({ docs: [match('a', 'Rival A', 'procesando', undefined, {
       startedAt, analysisStage: 'detecting', analysisFrames: { done: 40, total: 100 },
     })] }))
-    expect(screen.getByRole('progressbar').value).toBe(40)
+    expect(screen.getByRole('progressbar').value).toBe(28)
+    expect(screen.getByText(/28 % · Faltan unos 3 min/)).toBeTruthy()
     expect(screen.getByText('40 de 100 fotogramas en esta etapa')).toBeTruthy()
     expect(screen.getByText(/Tiempo transcurrido: 1 min/)).toBeTruthy()
 
@@ -164,7 +165,6 @@ describe('Analizar video v1', () => {
     const fileInput = screen.getByLabelText('Selecciona el video del partido')
     const submit = screen.getByRole('button', { name: /Añadir a la cola/ })
     await user.upload(fileInput, new File(['demo'], 'baja-resolucion.mp4', { type: 'video/mp4' }))
-    await user.click(submit)
     expect((await screen.findByRole('alert')).textContent).toBe(message)
     expect(fileInput.getAttribute('aria-invalid')).toBe('true')
     expect(props.send).not.toHaveBeenCalled()

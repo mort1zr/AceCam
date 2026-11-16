@@ -45,6 +45,7 @@ const textos = {
     errorGuardar: 'No pudimos guardar los cambios. Inténtalo de nuevo.',
     nombre: 'Nombre',
     correo: 'Correo',
+    noEditable: 'No editable',
     cargo: 'Cargo',
     rol: 'Rol',
     roles: { admin: 'Administrador', coach: 'Entrenador' },
@@ -160,6 +161,7 @@ const textos = {
     errorGuardar: 'We couldn’t save your changes. Try again.',
     nombre: 'Name',
     correo: 'Email',
+    noEditable: 'Not editable',
     cargo: 'Position',
     rol: 'Role',
     roles: { admin: 'Administrator', coach: 'Coach' },
@@ -254,7 +256,7 @@ const subtitulo = 'font-display text-[22px] leading-tight font-bold tracking-[0.
 const etiqueta = 'text-xs font-semibold tracking-[0.08em] text-muted uppercase'
 const campo = 'flex flex-col gap-1.5 text-[13px] font-semibold text-text2'
 const entrada =
-  'h-11 w-full min-w-0 rounded-[10px] border border-line2 bg-bg px-3.5 text-[15px] font-normal text-text transition-colors placeholder:text-placeholder hover:border-line3 focus:border-accent-ink focus:ring-1 focus:ring-accent-ink focus:outline-none read-only:text-muted read-only:hover:border-line2 disabled:cursor-not-allowed disabled:opacity-60'
+  'h-11 w-full min-w-0 rounded-[10px] border border-line2 bg-bg px-3.5 text-[15px] font-normal text-text transition-colors placeholder:text-placeholder hover:border-line3 focus:border-accent-ink focus:ring-1 focus:ring-accent-ink focus:outline-none read-only:cursor-default read-only:border-dashed read-only:bg-surface2 read-only:pr-10 read-only:text-text2 read-only:hover:border-line2 disabled:cursor-not-allowed disabled:opacity-60'
 const boton =
   'inline-flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-[10px] border px-4 text-sm font-semibold whitespace-nowrap transition-colors disabled:cursor-not-allowed disabled:opacity-50'
 const botonPrincipal = `${boton} border-accent-line bg-accent text-on-accent hover:opacity-90`
@@ -295,12 +297,32 @@ function Interruptor({ activo, onChange, etiqueta: nombre, disabled }) {
   )
 }
 
-function Mensaje({ estado }) {
-  if (!estado) return <p role="status" className="min-h-5 text-sm" />
+function Candado() {
+  return (
+    <svg
+      width="15"
+      height="15"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      className="pointer-events-none absolute top-1/2 right-3.5 -translate-y-1/2 text-muted"
+    >
+      <rect x="5" y="11" width="14" height="10" rx="2" />
+      <path d="M8 11V7a4 4 0 018 0v4" />
+    </svg>
+  )
+}
+
+function Mensaje({ estado, className = '' }) {
+  if (!estado) return <p role="status" className={`min-h-5 text-sm ${className}`} />
   return (
     <p
       role={estado.tipo === 'error' ? 'alert' : 'status'}
-      className={`min-h-5 text-sm font-medium ${estado.tipo === 'error' ? 'text-bad' : 'text-good'}`}
+      className={`min-h-5 text-sm font-medium ${estado.tipo === 'error' ? 'text-bad' : 'text-good'} ${className}`}
     >
       {estado.texto}
     </p>
@@ -443,7 +465,7 @@ function Cuenta({ t, datos, service, bloqueado }) {
                 className="avatar-aparecer size-18 font-display"
                 texto="text-2xl"
               />
-              <span className="absolute -right-0.5 -bottom-0.5 grid size-6.5 place-items-center rounded-full border-2 border-surface bg-surface2 text-text2 transition-colors group-hover:text-text">
+              <span className="absolute -right-0.5 -bottom-0.5 grid size-6.5 max-sm:size-7 place-items-center rounded-full border-2 border-surface bg-surface2 text-text2 transition-colors group-hover:text-text">
                 <svg
                   width="12"
                   height="12"
@@ -479,13 +501,17 @@ function Cuenta({ t, datos, service, bloqueado }) {
             </label>
             <label htmlFor={`${id}-correo`} className={campo}>
               {t.correo}
-              <input
-                id={`${id}-correo`}
-                type="email"
-                value={datos?.email ?? ''}
-                readOnly
-                className={entrada}
-              />
+              <span className="relative block">
+                <input
+                  id={`${id}-correo`}
+                  type="email"
+                  value={datos?.email ?? ''}
+                  readOnly
+                  title={t.noEditable}
+                  className={entrada}
+                />
+                <Candado />
+              </span>
             </label>
             <label htmlFor={`${id}-cargo`} className={campo}>
               {t.cargo}
@@ -499,15 +525,19 @@ function Cuenta({ t, datos, service, bloqueado }) {
             </label>
             <label htmlFor={`${id}-rol`} className={campo}>
               {t.rol}
-              <input
-                id={`${id}-rol`}
-                value={datos?.role ? t.roles[datos.role] : ''}
-                readOnly
-                className={entrada}
-              />
+              <span className="relative block">
+                <input
+                  id={`${id}-rol`}
+                  value={datos?.role ? t.roles[datos.role] : ''}
+                  readOnly
+                  title={t.noEditable}
+                  className={entrada}
+                />
+                <Candado />
+              </span>
             </label>
           </div>
-          <div className="flex flex-wrap items-center gap-2.5">
+          <div className="flex flex-wrap items-center gap-2.5 max-sm:flex-col max-sm:items-stretch max-sm:[&>button]:w-full">
             <button type="submit" className={botonPrincipal}>
               {ocupado ? t.guardando : t.guardarCambios}
             </button>
@@ -519,7 +549,7 @@ function Cuenta({ t, datos, service, bloqueado }) {
             >
               {t.cambiarContrasena}
             </button>
-            <Mensaje estado={estado} />
+            <Mensaje estado={estado} className="max-sm:empty:-mt-2.5 max-sm:empty:min-h-0" />
           </div>
         </fieldset>
       </form>
@@ -1113,7 +1143,7 @@ export default function Configuracion({ service: inyectado, db, auth, session })
       <div className="flex flex-wrap items-start gap-5">
         <nav
           aria-label={t.menu}
-          className={`${tarjeta} flex flex-[1_1_220px] flex-col gap-0.5 p-2 max-xl:-mx-1 max-xl:basis-full max-xl:flex-row max-xl:overflow-x-auto max-xl:p-1.5 max-xl:[scrollbar-width:none] max-xl:[mask-image:linear-gradient(to_right,#000_calc(100%-28px),transparent)] xl:sticky xl:top-24`}
+          className={`${tarjeta} flex flex-[1_1_220px] flex-col gap-0.5 p-2 max-xl:-mx-1 max-xl:basis-full max-xl:flex-row max-xl:overflow-x-auto max-xl:p-1.5 max-xl:pr-10 max-xl:[scrollbar-width:none] max-xl:[mask-image:linear-gradient(to_right,#000_calc(100%-44px),transparent)] xl:sticky xl:top-24`}
         >
           {visibles.map((clave) => (
             <button
