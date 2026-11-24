@@ -20,6 +20,8 @@ export default function AnalysisForm({ service, players, playersLoading, players
   const importing = values.sourceType === 'link'
   const transferTitle = checking ? 'Verificando el video…' : saving ? 'Guardando partido…' : importing ? 'Importando video…' : 'Cargando video…'
   const transferPercent = checking || (importing && progress.percent === 0) ? null : Math.round(progress.percent)
+  const linkSource = service.youtubeOnly ? 'Enlace a un video público de YouTube.' : service.supportsYouTube
+    ? 'Video público de YouTube o enlace directo a MP4/MOV.' : 'Enlace público directo a MP4 o MOV.'
   const request = useRef(null)
   const controller = useRef(null)
   const active = useRef(false)
@@ -154,7 +156,7 @@ export default function AnalysisForm({ service, players, playersLoading, players
               {fieldError('file')}
             </div>
           ) : (
-            <div className="players-field analysis-url"><label htmlFor={`${id}-url`}>Enlace del video *</label><input id={`${id}-url`} type="url" name="url" value={values.url} onChange={update} placeholder={service.supportsYouTube ? 'https://youtu.be/abcdefghijk' : 'https://ejemplo.com/partido.mp4'} {...invalid('url')} /><p>{service.supportsYouTube ? 'Video público de YouTube o enlace directo a MP4/MOV.' : 'Enlace público directo a MP4 o MOV.'} {service.mode === 'demo' ? 'En esta demostración solo se valida el enlace; no se descarga ningún video.' : 'Se comprobará su formato y tamaño antes de añadirlo a la cola.'}</p>{fieldError('url')}</div>
+            <div className="players-field analysis-url"><label htmlFor={`${id}-url`}>Enlace del video *</label><input id={`${id}-url`} type="url" name="url" value={values.url} onChange={update} placeholder={service.supportsYouTube ? 'https://youtu.be/abcdefghijk' : 'https://ejemplo.com/partido.mp4'} {...invalid('url')} /><p>{linkSource} {service.mode === 'demo' ? 'En esta demostración solo se valida el enlace; no se descarga ningún video.' : 'Se comprobará su formato y tamaño antes de añadirlo a la cola.'}</p>{fieldError('url')}</div>
           )}
           {!service.supportsLinks && <p className="analysis-muted">La importación por enlace aún no está disponible. Puedes usar un archivo.</p>}
         </section>

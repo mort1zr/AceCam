@@ -2,7 +2,7 @@ import { useCallback, useMemo } from 'react'
 import { useAuth } from './context/AuthContext.js'
 import { contratarPlan } from './lib/contratarPlan.js'
 import { auth, db, storage } from './lib/firebase.js'
-import { createHttpVideoImporter } from './lib/services/httpVideoImportService.js'
+import { createAzureYouTubeVideoImporter, createHttpVideoImporter } from './lib/services/httpVideoImportService.js'
 import { createAzureVideoClient, createAzureVideoUploadService } from './lib/azureVideos.js'
 import { createVideoUploadService, MAX_VIDEO_BYTES } from './lib/videoUpload.js'
 
@@ -18,20 +18,20 @@ function usePropsPanel() {
   const { user, profile } = useAuth()
   const session =
     user && profile ? { uid: user.uid, orgId: profile.orgId, role: profile.role } : undefined
-  const importVideo = useMemo(
-    () =>
-      createHttpVideoImporter({
-        enabled: import.meta.env.DEV && import.meta.env.MODE === 'demo' && Boolean(user && profile),
-        supportsYouTube: true,
-        endpoint: '/api/video-import',
-        getSession: async () => ({
-          orgId: profile.orgId,
-          actorId: user.uid,
-          token: await user.getIdToken(),
-        }),
-      }),
-    [user, profile],
-  )
+  const importVideo = useMemo(() => {
+    if (!user || !profile) return undefined
+    const getSession = async () => ({
+      orgId: profile.orgId,
+      actorId: user.uid,
+      token: await user.getIdToken(),
+    })
+    if (import.meta.env.DEV && import.meta.env.MODE === 'demo') {
+      return createHttpVideoImporter({ enabled: true, supportsYouTube: true, endpoint: '/api/video-import', getSession })
+    }
+    return createAzureYouTubeVideoImporter({
+      enabled: import.meta.env.VITE_AZURE_YOUTUBE_IMPORT_ENABLED === 'true', apiUrl: videoApiUrl, getSession,
+    })
+  }, [user, profile])
   const orgId = profile?.orgId
   const contratar = useCallback(
     ({ plan, periodo }) => contratarPlan({ db, orgId, plan, periodo }),

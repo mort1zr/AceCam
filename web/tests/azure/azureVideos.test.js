@@ -3,15 +3,24 @@
 // Ejecutar con: npm run test:rules   (Azurite se enciende y apaga dentro de la prueba)
 
 import { spawn } from 'node:child_process'
+import { createHash } from 'node:crypto'
+import { unlink, writeFile } from 'node:fs/promises'
 import { createConnection } from 'node:net'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { BlobServiceClient } from '@azure/storage-blob'
+import { initializeTestEnvironment } from '@firebase/rules-unit-testing'
 import { deleteApp, initializeApp } from 'firebase-admin/app'
 import { getAuth } from 'firebase-admin/auth'
 import { getFirestore } from 'firebase-admin/firestore'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { createAzureVideoHandler } from '../../server/azure-videos/http.js'
 import { createSasSigner } from '../../server/azure-videos/sas.js'
+import { createAzureVideoImportStore } from '../../server/azure-videos/importStore.js'
+import { createFirestoreAnalysisService } from '../../src/panel/lib/services/firestoreAnalysisService.js'
+import { createAzureYouTubeVideoImporter } from '../../src/panel/lib/services/httpVideoImportService.js'
+import { usagePeriod } from '../../src/panel/lib/usage.js'
 
 const ORIGIN = 'http://localhost:5173'
 const CONTAINER = 'videos'
@@ -85,6 +94,104 @@ const sign = (uid, body) => handler(new Request(`${ORIGIN}/api/videos/sign`, {
 }))
 
 const upload = (signed, data = bytes) => fetch(signed.url, { method: 'PUT', headers: signed.headers, body: data })
+
+describe('almacenamiento de importaciones de YouTube en Azurite', () => {
+  it('confirma un único Blob privado tras guardar y reutiliza el recibo de Firestore al reintentar', async () => {
+    const container = serviceClient.getContainerClient(CONTAINER)
+    const store = createAzureVideoImportStore({ db, container })
+    const matchId = `yt-${Date.now()}`
+    const videoPath = `orgs/org-a/matches/${matchId}/video.mp4`
+    const localPath = join(tmpdir(), `acecam-${matchId}.mp4`)
+    const sha256 = createHash('sha256').update(bytes).digest('hex')
+    const record = {
+      orgId: 'org-a', actorId: 'coach-a', matchId, sourceHash: 'video-de-prueba',
+      localPath, sha256, bytes: bytes.length, metadata: { extension: 'mp4', contentType: 'video/mp4' },
+    }
+    await writeFile(localPath, bytes, { flag: 'wx' })
+    try {
+      expect(await store.find(record)).toBeNull()
+      await expect(store.putIfAbsent({ ...record, localPath: `${localPath}.missing` })).rejects.toThrow()
+      expect(await container.getBlobClient(videoPath).exists()).toBe(false)
+      const results = await Promise.all([store.putIfAbsent(record), store.putIfAbsent(record)])
+      expect(results).toEqual([expect.objectContaining({ videoPath }), expect.objectContaining({ videoPath })])
+      expect(await createAzureVideoImportStore({ db, container }).find(record)).toEqual(results[0])
+      const blob = container.getBlobClient(videoPath)
+      expect(await blob.downloadToBuffer()).toEqual(Buffer.from(bytes))
+      expect((await blob.getProperties()).metadata).toEqual({ uploadedby: 'coach-a', sha256 })
+      expect((await fetch(blob.url)).ok).toBe(false)
+      await expect(store.find({ ...record, actorId: 'coach2-a' })).rejects.toMatchObject({ code: 'import/conflict' })
+      await expect(store.putIfAbsent({ ...record, sourceHash: 'otro-video' })).rejects.toMatchObject({ code: 'import/conflict' })
+      expect((await db.doc(`matches/${matchId}`).get()).exists).toBe(false)
+    } finally {
+      await unlink(localPath)
+    }
+  })
+
+  it('encola una sola vez después de confirmar Blob, conserva la cuota y no encola un enlace no disponible', async () => {
+    const orgId = 'org-yt-cola'
+    const actorId = 'coach-yt-cola'
+    const playerId = 'player-yt-cola'
+    const matchId = 'match-yt-cola'
+    const failedId = 'match-yt-error'
+    const quotaId = 'match-yt-cuota'
+    const usage = db.doc(`orgs/${orgId}/usage/${usagePeriod()}`)
+    const videoPath = `orgs/${orgId}/matches/${matchId}/video.mp4`
+    const localPath = join(tmpdir(), `acecam-${Date.now()}-cola.mp4`)
+    const container = serviceClient.getContainerClient(CONTAINER)
+    const store = createAzureVideoImportStore({ db, container })
+    const [host, port] = process.env.FIRESTORE_EMULATOR_HOST.split(':')
+    const env = await initializeTestEnvironment({ projectId: PROJECT, firestore: { host, port: Number(port) } })
+    try {
+      await writeFile(localPath, bytes, { flag: 'wx' })
+      await Promise.all([
+        db.doc(`users/${actorId}`).set({ orgId, role: 'coach', email: `${actorId}@acecam.test`, displayName: actorId, createdAt: new Date() }),
+        db.doc(`orgs/${orgId}`).set({ name: 'Club de pruebas', plan: 'basico' }),
+        db.doc(`players/${playerId}`).set({ orgId, createdBy: actorId, fullName: 'Valeria Torres' }),
+      ])
+      const clientDb = env.authenticatedContext(actorId, { email: `${actorId}@acecam.test` }).firestore()
+      const input = { sourceType: 'link', url: 'https://youtu.be/abcdefghijk', playerId, playerPosition: 'abajo', opponent: 'Rival de prueba', matchDate: '2026-01-01' }
+      let calls = 0
+      const importVideo = createAzureYouTubeVideoImporter({
+        enabled: true, apiUrl: 'https://azure-videos.example', origin: ORIGIN,
+        getSession: async () => ({ orgId, actorId, token: 'test-token' }),
+        async fetcher(_url, { body, signal }) {
+          calls++
+          const request = JSON.parse(body)
+          if (request.matchId === failedId) return Response.json({ error: { code: 'import/youtube-unavailable' } }, { status: 422 })
+          expect(request).toEqual({ url: input.url, matchId })
+          expect((await db.doc(`matches/${matchId}`).get()).exists).toBe(false)
+          expect((await usage.get()).exists).toBe(false)
+          const receipt = await store.putIfAbsent({
+            orgId, actorId, matchId, localPath, signal, sourceHash: 'fuente-de-prueba', bytes: bytes.length,
+            sha256: createHash('sha256').update(bytes).digest('hex'), metadata: { extension: 'mp4', contentType: 'video/mp4' },
+          })
+          return Response.json({ videoPath: receipt.videoPath })
+        },
+      })
+      const service = () => createFirestoreAnalysisService({ db: clientDb, orgId, actorId, importVideo, maxBytes: 5000,
+        uploadVideo: () => { throw new Error('Esta prueba usa un enlace.') },
+      })
+      const analysis = service()
+      await expect(analysis.enqueue(input, { requestId: failedId })).rejects.toMatchObject({ code: 'import/youtube-unavailable' })
+      expect((await db.doc(`matches/${failedId}`).get()).exists).toBe(false)
+      expect((await usage.get()).exists).toBe(false)
+      const submission = analysis.enqueue(input, { requestId: matchId })
+      expect(analysis.enqueue(input, { requestId: matchId })).toBe(submission)
+      expect(await submission).toMatchObject({ id: matchId, status: 'en cola', videoPath })
+      expect(await service().enqueue(input, { requestId: matchId })).toMatchObject({ id: matchId, videoPath })
+      expect((await usage.get()).data()).toMatchObject({ analyses: 1, lastMatchId: matchId })
+      expect(await container.getBlobClient(videoPath).downloadToBuffer()).toEqual(Buffer.from(bytes))
+      expect(await container.getBlobClient(`orgs/${orgId}/matches/${failedId}/video.mp4`).exists()).toBe(false)
+      await usage.update({ analyses: 30 })
+      await expect(service().enqueue(input, { requestId: quotaId })).rejects.toMatchObject({ code: 'analysis/limit' })
+      expect((await db.doc(`matches/${quotaId}`).get()).exists).toBe(false)
+      expect(calls).toBe(2)
+    } finally {
+      await env.cleanup()
+      await unlink(localPath).catch(error => { if (error.code !== 'ENOENT') throw error })
+    }
+  })
+})
 
 describe('videos en Azure Blob con enlaces temporales (PCIT-223)', () => {
   it('bloquea nuevas firmas de lectura y escritura mientras la cuenta está suspendida', async () => {

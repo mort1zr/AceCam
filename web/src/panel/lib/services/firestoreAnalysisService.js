@@ -20,7 +20,12 @@ export function createFirestoreAnalysisService({ db, orgId, actorId, role = 'coa
   if (!['admin', 'coach'].includes(role)) throw new Error('Invalid analysis role.')
   const uploaded = new Map()
   const pending = new Map()
-  const capabilities = { maxBytes, supportsLinks: typeof importVideo === 'function', supportsYouTube: typeof importVideo === 'function' && importVideo.supportsYouTube === true }
+  const capabilities = {
+    maxBytes,
+    supportsLinks: typeof importVideo === 'function',
+    supportsYouTube: importVideo?.supportsYouTube === true,
+    youtubeOnly: importVideo?.youtubeOnly === true,
+  }
 
   async function enqueue(input, { requestId, onProgress, signal } = {}) {
     const errors = validateAnalysis(input, capabilities)

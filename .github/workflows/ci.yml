@@ -471,6 +471,7 @@ jobs:
           VITE_USE_FIREBASE_EMULATORS: "false"
           # PCIT-225: con esta variable los videos se suben a Azure (PCIT-222); vacía, a Firebase Storage.
           VITE_VIDEO_API_URL: ${{ vars.VITE_VIDEO_API_URL }}
+          VITE_AZURE_YOUTUBE_IMPORT_ENABLED: ${{ vars.VITE_AZURE_YOUTUBE_IMPORT_ENABLED }}
           # PCIT-198: el commit queda en <meta name="acecam-version"> del HTML publicado.
           ACECAM_VERSION: ${{ github.sha }}
         run: |
