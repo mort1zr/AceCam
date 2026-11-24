@@ -17,13 +17,14 @@ seguridad, SAST y OWASP corren siempre, sin importar la ruta.
 | `lint-workflow` | Siempre | `actionlint` valida el propio `ci.yml` | Sí |
 | `modelo-tests` | PR y push a main que tocan `model/` | ruff y pytest, con 100 % de cobertura en `scoring` | Sí |
 | `web-tests` | PR y push a main que tocan `web/`, `firebase/` o `firebase.json` | oxlint, vitest, build de Vite y chequeo de la CSP | Sí |
-| `web-reglas` | Igual que `web-tests` | Pruebas de reglas de Firestore/Storage contra emuladores, con informe de cobertura | Sí |
+| `web-reglas` | Igual que `web-tests` | Pruebas de reglas contra emuladores: matriz de acceso por rol en Firestore, Storage y la API de Azure (PCIT-211, PCIT-228), control de cobertura de las reglas (PCIT-212), borrado ARCO (PCIT-221) | Sí |
 | `secretos` | Siempre | gitleaks sobre el historial completo | Sí |
 | `dependencias-python` | Siempre | pip-audit sobre `model/requirements*.txt` | Sí |
 | `dependencias-web` | Siempre | npm audit de producción | Sí |
 | `revision-dependencias` | Solo PR | Dependency Review: bloquea dependencias nuevas vulnerables | Sí |
 | `owasp-dependency-check` | push a main y cada lunes | SCA contra la base NVD/CVE (ver más abajo) | No; sube a Code scanning |
 | `owasp-zap-baseline` | Tras desplegar: vista previa de cada PR y producción en main | DAST (ZAP) contra la web publicada, con las reglas de `.zap/rules.tsv` (PCIT-214) | **Sí** con un hallazgo FAIL; los avisos no bloquean |
+| `vigilancia-produccion` | Cada lunes (y a mano con `probar_vigilancia`) | Cabeceras de seguridad y ZAP Baseline sobre producción, aunque nadie suba código (PCIT-218) | Si algo falla, abre un issue con la etiqueta `vigilancia-seguridad` (o comenta en el abierto) |
 | `codeql` | Siempre | SAST de JavaScript, Python y los workflows | Los hallazgos aparecen en la PR |
 | `scorecard` | push a main y cada lunes | OpenSSF Scorecard: puntúa las prácticas del repo | No; informa |
 | `deploy` | Tras pasar `web-tests`/`web-reglas` | Firebase Hosting: vista previa (PR) o producción y reglas (main). Después comprueba la versión publicada y las cabeceras de seguridad (PCIT-215) | Despliega solo si la CI pasa; falla si una cabecera falta o se debilita |
@@ -190,6 +191,7 @@ la variable `DEPLOY_STORAGE_RULES` con valor `true` para publicar también `stor
 | OWASP Dependency-Check | Abre el hallazgo en **Security → Code scanning**. Si el CVE no aplica a cómo usamos la librería, descártalo con justificación; si no, actualiza la dependencia |
 | OWASP ZAP Baseline | El resumen del job dice qué regla falló y en qué URL; el informe completo está en el artefacto `zap_scan`. Corrige la causa. Si es un falso positivo, cámbialo a WARN en `.zap/rules.tsv` y anota el motivo en la tabla de abajo |
 | `check:csp` | Copia el hash que muestra el error en `script-src` de `firebase.json` |
+| Issue `vigilancia-seguridad` (PCIT-218) | La vigilancia del lunes encontró un fallo en producción sin que nadie cambiara el código: suele ser una cabecera que Firebase dejó de enviar o una librería que se volvió vulnerable. Abre la ejecución enlazada, corrige con las filas de cabeceras o ZAP de esta tabla y cierra el issue cuando la siguiente vigilancia salga en verde. Para comprobar que el aviso funciona: Actions → Pipeline → Run workflow con `probar_vigilancia` |
 | Cabeceras de seguridad (`checkHeaders.mjs`, PCIT-215) | El error dice qué cabecera falta o se debilitó en la web publicada. Corrígela en `hosting.headers` de `firebase.json` (fuente `**`). Para probar a mano: `npm run check:headers -- https://acecam-e93a2.web.app/` |
 | `download_models.py`: `sha256 no coincide` | **No uses ese archivo.** Vuelve a descargarlo con `--force`. Si se repite, el origen cambió: avisa al equipo antes de registrar un hash nuevo |
 

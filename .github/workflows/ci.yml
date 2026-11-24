@@ -40,6 +40,11 @@ on:
   schedule:
     - cron: "17 13 * * 1" # lunes 08:17 en Lima
   workflow_dispatch:
+    inputs:
+      probar_vigilancia:
+        description: "Forzar un fallo en la vigilancia de producción para comprobar que abre el issue (PCIT-218)"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -374,6 +379,103 @@ jobs:
             echo ""
             if [ -f report_md.md ]; then cat report_md.md; else echo "No se generó el informe."; fi
           } >> "$GITHUB_STEP_SUMMARY"
+
+  # PCIT-218: vigilancia semanal de producción. Cada lunes (y a mano, con probar_vigilancia,
+  # para comprobar el aviso) revisa las cabeceras de seguridad y pasa ZAP Baseline sobre la
+  # web publicada, aunque nadie haya subido código. Si algo falla, abre un issue con el
+  # informe, o comenta en el que siga abierto, para que el equipo se entere.
+  vigilancia-produccion:
+    name: "Vigilancia semanal de producción"
+    if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.probar_vigilancia)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      issues: write # abrir o comentar el issue de aviso
+    env:
+      PRODUCCION: https://acecam-e93a2.web.app/
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+      - name: Cabeceras de seguridad
+        id: headers
+        continue-on-error: true
+        working-directory: web
+        run: node scripts/checkHeaders.mjs "$PRODUCCION" "${PRODUCCION}privacidad" 2>&1 | tee "$RUNNER_TEMP/cabeceras.txt"; exit "${PIPESTATUS[0]}"
+      - name: ZAP Baseline
+        id: zap
+        continue-on-error: true
+        uses: zaproxy/action-baseline@de8ad967d3548d44ef623df22cf95c3b0baf8b25 # v0.15.0
+        with:
+          target: https://acecam-e93a2.web.app
+          rules_file_name: .zap/rules.tsv
+          cmd_options: "-a -I"
+          allow_issue_writing: false
+          fail_action: true
+          artifact_name: zap_vigilancia
+      - name: Fallo de prueba
+        id: prueba
+        if: github.event_name == 'workflow_dispatch' && inputs.probar_vigilancia
+        continue-on-error: true
+        run: |
+          echo "Fallo forzado a mano para comprobar el aviso (probar_vigilancia)."
+          exit 1
+      - name: Abrir o actualizar el issue de aviso
+        if: steps.headers.outcome == 'failure' || steps.zap.outcome == 'failure' || steps.prueba.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEADERS: ${{ steps.headers.outcome }}
+          ZAP: ${{ steps.zap.outcome }}
+          PRUEBA: ${{ steps.prueba.outcome }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          label="vigilancia-seguridad"
+          gh label create "$label" --color B60205 --description "Aviso de la vigilancia semanal (PCIT-218)" 2>/dev/null || true
+          {
+            echo "La vigilancia de producción encontró un problema en ${PRODUCCION}."
+            echo ""
+            echo "| Control | Resultado |"
+            echo "| --- | --- |"
+            echo "| Cabeceras de seguridad | $HEADERS |"
+            echo "| ZAP Baseline | $ZAP |"
+            if [ "$PRUEBA" = "failure" ]; then echo "| Fallo de prueba (probar_vigilancia) | forzado |"; fi
+            echo ""
+            echo "Ejecución: $RUN_URL (el informe de ZAP está en el artefacto \`zap_vigilancia\`)."
+            echo ""
+            echo "Cabeceras:"
+            echo '```'
+            cat "$RUNNER_TEMP/cabeceras.txt" 2>/dev/null || echo "(sin salida)"
+            echo '```'
+            echo ""
+            echo "Qué hacer: docs/devsecops.md, sección 4."
+          } > "$RUNNER_TEMP/aviso.md"
+          open=$(gh issue list --label "$label" --state open --json number --jq '.[0].number' --repo "$GITHUB_REPOSITORY")
+          if [ -n "$open" ]; then
+            gh issue comment "$open" --body-file "$RUNNER_TEMP/aviso.md" --repo "$GITHUB_REPOSITORY"
+          else
+            gh issue create --title "Vigilancia semanal: falla un control de seguridad en producción" \
+              --label "$label" --body-file "$RUNNER_TEMP/aviso.md" --repo "$GITHUB_REPOSITORY"
+          fi
+      - name: Resultado
+        if: always()
+        env:
+          HEADERS: ${{ steps.headers.outcome }}
+          ZAP: ${{ steps.zap.outcome }}
+          PRUEBA: ${{ steps.prueba.outcome }}
+        run: |
+          {
+            echo "### Vigilancia de producción"
+            echo ""
+            echo "| Control | Resultado |"
+            echo "| --- | --- |"
+            echo "| Cabeceras de seguridad | $HEADERS |"
+            echo "| ZAP Baseline | $ZAP |"
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$HEADERS" = "failure" ] || [ "$ZAP" = "failure" ] || [ "$PRUEBA" = "failure" ]; then exit 1; fi
 
   # -------------------------------------------------------------------------  SAST
 
