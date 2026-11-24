@@ -7,7 +7,7 @@ import pytest
 from azure.core.exceptions import ResourceNotFoundError
 
 from worker import processor
-from worker.__main__ import lazy_analyzer, make_storage, use_service_account_from_env
+from worker.__main__ import lazy_analyzer, make_storage, max_duration_seconds, use_service_account_from_env
 from worker.firebase_backend import AzureBlobVideos
 
 
@@ -130,3 +130,26 @@ def test_an_existing_credentials_file_is_kept(tmp_path, monkeypatch):
 def test_the_worker_version_comes_from_the_image(monkeypatch):
     monkeypatch.setenv("ACECAM_VERSION", "5c750eb1886fd65b45f53e3604988ec4cb139d37")
     assert processor.worker_version() == "acecam-model 5c750eb"
+
+
+# PCIT-228: en Azure la tarea fija su propio tope de duración.
+BASE = {"worker": {"max_duration_seconds": 0}}
+
+
+def test_without_the_variable_the_limit_comes_from_config(monkeypatch):
+    monkeypatch.delenv("ACECAM_MAX_DURATION_SECONDS", raising=False)
+    assert max_duration_seconds(BASE) == 0
+    assert max_duration_seconds({"worker": {"max_duration_seconds": 60}}) == 60
+
+
+@pytest.mark.parametrize("raw, expected", [("90", 90.0), (" 120.5 ", 120.5), ("0", 0.0)])
+def test_the_variable_overrides_the_config(monkeypatch, raw, expected):
+    monkeypatch.setenv("ACECAM_MAX_DURATION_SECONDS", raw)
+    assert max_duration_seconds(BASE) == expected
+
+
+@pytest.mark.parametrize("raw", ["noventa", "-5"])
+def test_an_invalid_limit_stops_the_worker(monkeypatch, raw):
+    monkeypatch.setenv("ACECAM_MAX_DURATION_SECONDS", raw)
+    with pytest.raises(SystemExit, match="ACECAM_MAX_DURATION_SECONDS"):
+        max_duration_seconds(BASE)
