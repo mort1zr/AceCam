@@ -6,8 +6,8 @@
 import { doc, runTransaction, serverTimestamp } from 'firebase/firestore'
 import { COLLECTIONS } from './schema.js'
 
-export const PLANES_CHECKOUT = Object.freeze(['basico', 'pro', 'ultra'])
-export const PERIODOS = Object.freeze(['mensual', 'anual'])
+const PLANES_CHECKOUT = Object.freeze(['basico', 'pro', 'ultra'])
+const PERIODOS = Object.freeze(['mensual', 'anual'])
 
 /**
  * Valor que se guarda en orgs/{orgId}.plan para el plan elegido en el checkout.

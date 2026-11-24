@@ -15,6 +15,7 @@ import {
   PLANES,
 } from '../lib/services/firestoreConfiguracionService.js'
 import './configuracion.css'
+import PelotaTitulo from '../components/layout/PelotaTitulo.jsx'
 
 const secciones = ['cuenta', 'organizacion', 'equipo', 'preferencias', 'plan']
 const seccionesPersonales = ['cuenta', 'preferencias', 'plan']
@@ -22,6 +23,8 @@ const seccionesPersonales = ['cuenta', 'preferencias', 'plan']
 const textos = {
   es: {
     titulo: 'Configuración',
+    antetitulo: 'Tu cuenta y tu equipo',
+    subtitulo: 'Administra tu perfil, tu organización, tu equipo y tu plan.',
     menu: 'Secciones de configuración',
     pestanas: {
       cuenta: 'Cuenta',
@@ -42,6 +45,7 @@ const textos = {
     errorGuardar: 'No pudimos guardar los cambios. Inténtalo de nuevo.',
     nombre: 'Nombre',
     correo: 'Correo',
+    noEditable: 'No editable',
     cargo: 'Cargo',
     rol: 'Rol',
     roles: { admin: 'Administrador', coach: 'Entrenador' },
@@ -135,6 +139,8 @@ const textos = {
   },
   en: {
     titulo: 'Settings',
+    antetitulo: 'Your account and team',
+    subtitulo: 'Manage your profile, organization, team and plan.',
     menu: 'Settings sections',
     pestanas: {
       cuenta: 'Account',
@@ -155,6 +161,7 @@ const textos = {
     errorGuardar: 'We couldn’t save your changes. Try again.',
     nombre: 'Name',
     correo: 'Email',
+    noEditable: 'Not editable',
     cargo: 'Position',
     rol: 'Role',
     roles: { admin: 'Administrator', coach: 'Coach' },
@@ -249,7 +256,7 @@ const subtitulo = 'font-display text-[22px] leading-tight font-bold tracking-[0.
 const etiqueta = 'text-xs font-semibold tracking-[0.08em] text-muted uppercase'
 const campo = 'flex flex-col gap-1.5 text-[13px] font-semibold text-text2'
 const entrada =
-  'h-11 w-full min-w-0 rounded-[10px] border border-line2 bg-bg px-3.5 text-[15px] font-normal text-text transition-colors placeholder:text-placeholder hover:border-line3 focus:border-accent-line focus:outline-none read-only:text-muted read-only:hover:border-line2 disabled:cursor-not-allowed disabled:opacity-60'
+  'h-11 w-full min-w-0 rounded-[10px] border border-line2 bg-bg px-3.5 text-[15px] font-normal text-text transition-colors placeholder:text-placeholder hover:border-line3 focus:border-accent-ink focus:ring-1 focus:ring-accent-ink focus:outline-none read-only:cursor-default read-only:border-dashed read-only:bg-surface2 read-only:pr-10 read-only:text-text2 read-only:hover:border-line2 disabled:cursor-not-allowed disabled:opacity-60'
 const boton =
   'inline-flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-[10px] border px-4 text-sm font-semibold whitespace-nowrap transition-colors disabled:cursor-not-allowed disabled:opacity-50'
 const botonPrincipal = `${boton} border-accent-line bg-accent text-on-accent hover:opacity-90`
@@ -290,12 +297,32 @@ function Interruptor({ activo, onChange, etiqueta: nombre, disabled }) {
   )
 }
 
-function Mensaje({ estado }) {
-  if (!estado) return <p role="status" className="min-h-5 text-sm" />
+function Candado() {
+  return (
+    <svg
+      width="15"
+      height="15"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      className="pointer-events-none absolute top-1/2 right-3.5 -translate-y-1/2 text-muted"
+    >
+      <rect x="5" y="11" width="14" height="10" rx="2" />
+      <path d="M8 11V7a4 4 0 018 0v4" />
+    </svg>
+  )
+}
+
+function Mensaje({ estado, className = '' }) {
+  if (!estado) return <p role="status" className={`min-h-5 text-sm ${className}`} />
   return (
     <p
       role={estado.tipo === 'error' ? 'alert' : 'status'}
-      className={`min-h-5 text-sm font-medium ${estado.tipo === 'error' ? 'text-bad' : 'text-good'}`}
+      className={`min-h-5 text-sm font-medium ${estado.tipo === 'error' ? 'text-bad' : 'text-good'} ${className}`}
     >
       {estado.texto}
     </p>
@@ -438,7 +465,7 @@ function Cuenta({ t, datos, service, bloqueado }) {
                 className="avatar-aparecer size-18 font-display"
                 texto="text-2xl"
               />
-              <span className="absolute -right-0.5 -bottom-0.5 grid size-6.5 place-items-center rounded-full border-2 border-surface bg-surface2 text-text2 transition-colors group-hover:text-text">
+              <span className="absolute -right-0.5 -bottom-0.5 grid size-6.5 max-sm:size-7 place-items-center rounded-full border-2 border-surface bg-surface2 text-text2 transition-colors group-hover:text-text">
                 <svg
                   width="12"
                   height="12"
@@ -474,13 +501,17 @@ function Cuenta({ t, datos, service, bloqueado }) {
             </label>
             <label htmlFor={`${id}-correo`} className={campo}>
               {t.correo}
-              <input
-                id={`${id}-correo`}
-                type="email"
-                value={datos?.email ?? ''}
-                readOnly
-                className={entrada}
-              />
+              <span className="relative block">
+                <input
+                  id={`${id}-correo`}
+                  type="email"
+                  value={datos?.email ?? ''}
+                  readOnly
+                  title={t.noEditable}
+                  className={entrada}
+                />
+                <Candado />
+              </span>
             </label>
             <label htmlFor={`${id}-cargo`} className={campo}>
               {t.cargo}
@@ -494,15 +525,19 @@ function Cuenta({ t, datos, service, bloqueado }) {
             </label>
             <label htmlFor={`${id}-rol`} className={campo}>
               {t.rol}
-              <input
-                id={`${id}-rol`}
-                value={datos?.role ? t.roles[datos.role] : ''}
-                readOnly
-                className={entrada}
-              />
+              <span className="relative block">
+                <input
+                  id={`${id}-rol`}
+                  value={datos?.role ? t.roles[datos.role] : ''}
+                  readOnly
+                  title={t.noEditable}
+                  className={entrada}
+                />
+                <Candado />
+              </span>
             </label>
           </div>
-          <div className="flex flex-wrap items-center gap-2.5">
+          <div className="flex flex-wrap items-center gap-2.5 max-sm:flex-col max-sm:items-stretch max-sm:[&>button]:w-full">
             <button type="submit" className={botonPrincipal}>
               {ocupado ? t.guardando : t.guardarCambios}
             </button>
@@ -514,7 +549,7 @@ function Cuenta({ t, datos, service, bloqueado }) {
             >
               {t.cambiarContrasena}
             </button>
-            <Mensaje estado={estado} />
+            <Mensaje estado={estado} className="max-sm:empty:-mt-2.5 max-sm:empty:min-h-0" />
           </div>
         </fieldset>
       </form>
@@ -1014,6 +1049,18 @@ function Plan({ t, plan, locale, esOrganizacion }) {
   )
 }
 
+function centrarPestana(boton) {
+  if (!boton) return
+  const centrar = () => {
+    const barra = boton.parentElement
+    if (!barra) return
+    const caja = barra.getBoundingClientRect()
+    const pestana = boton.getBoundingClientRect()
+    barra.scrollLeft += pestana.left - caja.left - (caja.width - pestana.width) / 2
+  }
+  ;(document.fonts?.ready ?? Promise.resolve()).then(() => requestAnimationFrame(centrar))
+}
+
 function Contenido({ seccion, t, datos, service, bloqueado, locale, esOrganizacion }) {
   if (seccion === 'cuenta')
     return <Cuenta t={t} datos={datos?.account} service={service} bloqueado={bloqueado} />
@@ -1071,8 +1118,17 @@ export default function Configuracion({ service: inyectado, db, auth, session })
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-300 flex-col gap-5">
-      <h1 className="font-display text-[40px] leading-none font-bold">{t.titulo}</h1>
+    <div className="mx-auto flex w-full max-w-310 flex-col gap-6">
+      <div>
+        <p className="text-xs font-semibold tracking-[0.08em] text-muted uppercase">
+          {t.antetitulo}
+        </p>
+        <h1 className="mt-1.5 font-display text-[44px] leading-none font-bold">
+          {t.titulo}
+          <PelotaTitulo />
+        </h1>
+        <p className="mt-1.5 text-base text-muted">{t.subtitulo}</p>
+      </div>
 
       {!service && (
         <p
@@ -1087,15 +1143,16 @@ export default function Configuracion({ service: inyectado, db, auth, session })
       <div className="flex flex-wrap items-start gap-5">
         <nav
           aria-label={t.menu}
-          className={`${tarjeta} flex flex-[1_1_220px] flex-col gap-0.5 p-2 max-md:-mx-1 max-md:flex-row max-md:overflow-x-auto max-md:p-1.5 max-md:[scrollbar-width:none] lg:sticky lg:top-24`}
+          className={`${tarjeta} flex flex-[1_1_220px] flex-col gap-0.5 p-2 max-xl:-mx-1 max-xl:basis-full max-xl:flex-row max-xl:overflow-x-auto max-xl:p-1.5 max-xl:pr-10 max-xl:[scrollbar-width:none] max-xl:[mask-image:linear-gradient(to_right,#000_calc(100%-44px),transparent)] xl:sticky xl:top-24`}
         >
           {visibles.map((clave) => (
             <button
               key={clave}
               type="button"
               aria-current={seccion === clave ? 'page' : undefined}
+              ref={seccion === clave ? centrarPestana : undefined}
               onClick={() => elegir(clave)}
-              className="flex min-h-11 w-full cursor-pointer items-center rounded-[10px] px-3.5 text-left text-[15px] font-semibold whitespace-nowrap text-text2 max-md:w-auto max-md:shrink-0 transition-colors hover:bg-surface2 hover:text-text aria-[current=page]:bg-line aria-[current=page]:text-text"
+              className="flex min-h-11 w-full cursor-pointer items-center rounded-[10px] px-3.5 text-left text-[15px] font-semibold whitespace-nowrap text-text2 max-xl:w-auto max-xl:shrink-0 transition-colors hover:bg-surface2 hover:text-text aria-[current=page]:bg-line aria-[current=page]:text-text"
             >
               {t.pestanas[clave]}
             </button>

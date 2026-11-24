@@ -12,6 +12,13 @@ import { createFirestoreAnalysisService } from '../lib/services/firestoreAnalysi
 import { createFirestorePlayersService } from '../lib/services/firestorePlayersService.js'
 import './jugadores.css'
 import './analizar.css'
+import PaginacionTabla, { tamanosPagina } from '../components/ui/PaginacionTabla.jsx'
+import { EsqueletoTabla } from '../components/dashboard/EsqueletoDashboard.jsx'
+import '../components/dashboard/esqueleto.css'
+import PelotaTitulo from '../components/layout/PelotaTitulo.jsx'
+
+const fechaCorta = (value) =>
+  typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value.split('-').reverse().join('/') : (value ?? '—')
 
 const sinConexion = { mode: 'offline', supportsLinks: false, supportsYouTube: false }
 
@@ -24,6 +31,31 @@ const processingLabels = new Map([
   ['encoding', 'Preparando el video para reproducirlo…'],
   ['saving', 'Guardando el resultado…'],
 ])
+
+const stageRanges = new Map([
+  ['preparing', [0, 4]],
+  ['analyzing', [4, 6]],
+  ['detecting', [6, 60]],
+  ['calculating', [60, 66]],
+  ['rendering', [66, 90]],
+  ['encoding', [90, 97]],
+  ['saving', [97, 100]],
+])
+
+function overallPercent(stage, done, total, hasFrames) {
+  const range = stageRanges.get(stage)
+  if (!range) return null
+  const [from, to] = range
+  const fraction = hasFrames ? done / total : 0
+  return Math.min(99, Math.round(from + (to - from) * fraction))
+}
+
+function remainingLabel(elapsed, percent) {
+  if (elapsed === null || percent === null || percent < 8 || elapsed < 15) return null
+  const left = Math.max(1, Math.round((elapsed * (100 - percent)) / percent))
+  if (left < 60) return 'Falta menos de 1 min'
+  return `Faltan unos ${Math.round(left / 60)} min`
+}
 
 function ProcessingProgress({ match, playerName }) {
   const startedAt = match.startedAt?.toMillis?.()
@@ -41,12 +73,15 @@ function ProcessingProgress({ match, playerName }) {
   const { done, total } = match.analysisFrames ?? {}
   const hasFrames = Number.isInteger(done) && Number.isInteger(total) && total > 0 && done >= 0 && done <= total
   const label = `Análisis de ${playerName} contra ${match.opponent} (${match.matchDate})`
+  const percent = overallPercent(match.analysisStage, done, total, hasFrames)
+  const remaining = remainingLabel(elapsed, percent)
 
   return (
     <div className="analysis-processing">
-      {hasFrames
-        ? <progress className="analysis-processing-frames" aria-label={label} max={total} value={done} />
+      {percent !== null
+        ? <progress className="analysis-processing-frames" aria-label={label} max={100} value={percent} />
         : <div className="analysis-processing-bar" role="progressbar" aria-label={label} />}
+      {percent !== null && <strong className="analysis-processing-percent">{percent} %{remaining && ` · ${remaining}`}</strong>}
       <span aria-live="polite">
         {processingLabels.get(match.analysisStage) ?? processingLabels.get('analyzing')}
       </span>
@@ -63,7 +98,7 @@ function Cabecera() {
     <header className="analysis-head">
       <p className="players-eyebrow">Del partido a los datos</p>
       <h1 id="analysis-title">
-        Analizar video<span className="players-title-dot">.</span>
+        Analizar video<PelotaTitulo />
       </h1>
       <p>
         Consulta la etapa y el tiempo transcurrido en la cola mientras se analiza tu video.
@@ -88,6 +123,12 @@ function Guia() {
 }
 
 function Cola({ columns, rows, loading, error, onRetry }) {
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(tamanosPagina[0])
+  const pages = Math.max(1, Math.ceil(rows.length / pageSize))
+  const currentPage = Math.min(page, pages)
+  const visibleRows = rows.slice((currentPage - 1) * pageSize, currentPage * pageSize)
+  const ready = !loading && !error
   return (
     <section className="analysis-queue" aria-labelledby="analysis-queue-title">
       <div className="analysis-queue-heading">
@@ -101,19 +142,34 @@ function Cola({ columns, rows, loading, error, onRetry }) {
           {loading ? 'Cargando…' : `${rows.length} ${rows.length === 1 ? 'partido' : 'partidos'}`}
         </span>
       </div>
-      {!loading && !error && rows.length > 0 && (
-        <p className="players-table-hint">Desliza la tabla para ver todas las columnas.</p>
+      {loading ? (
+        <EsqueletoTabla etiqueta="partidos" />
+      ) : (
+        <DataTable
+          resizable
+          cards
+          caption="Partidos y estado del análisis"
+          columns={columns}
+          rows={visibleRows}
+          error={error}
+          onRetry={onRetry}
+          emptyTitle="El próximo análisis empieza aquí"
+          emptyDescription="Carga un video y vincúlalo a un jugador. Su estado aparecerá en esta lista."
+        />
       )}
-      <DataTable
-        caption="Partidos y estado del análisis"
-        columns={columns}
-        rows={rows}
-        loading={loading}
-        error={error}
-        onRetry={onRetry}
-        emptyTitle="El próximo análisis empieza aquí"
-        emptyDescription="Carga un video y vincúlalo a un jugador. Su estado aparecerá en esta lista."
-      />
+      {ready && (
+        <PaginacionTabla
+          total={rows.length}
+          page={currentPage}
+          pageSize={pageSize}
+          etiqueta="partidos"
+          onPage={setPage}
+          onPageSize={(size) => {
+            setPageSize(size)
+            setPage(1)
+          }}
+        />
+      )}
     </section>
   )
 }
@@ -168,7 +224,7 @@ function AnalysisWorkspace({ service, playersService }) {
       render: playerName,
     },
     { key: 'opponent', label: 'Rival' },
-    { key: 'matchDate', label: 'Fecha' },
+    { key: 'matchDate', label: 'Fecha', render: fechaCorta },
     {
       key: 'status',
       label: 'Estado',

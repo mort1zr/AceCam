@@ -8,8 +8,10 @@ registrado por Firestore al reclamar el partido.
 
 Durante la detección y la generación del video anotado, el worker publica
 `analysisFrames` con los fotogramas recorridos y el total de esa etapa, como
-máximo cada cinco segundos y al finalizar el conteo. El resto de las etapas
-mantiene la barra indeterminada. El tiempo mostrado es el transcurrido.
+máximo cada cinco segundos y al finalizar el conteo. Cada etapa ocupa un tramo fijo de la barra y los fotogramas avanzan dentro del
+tramo de su etapa, de modo que la fila muestra un porcentaje total y, pasados 15 s,
+un tiempo restante aproximado (tiempo transcurrido ÷ avance). Es una estimación:
+los tramos son fijos y no miden la duración real de cada etapa.
 La barra de transferencia del formulario muestra el avance de la carga y es
 independiente del estado del análisis.
 
@@ -23,4 +25,4 @@ el indicador estático.
 La prueba de la pantalla emite cambios en la suscripción de Firestore para dos
 partidos. Comprueba que las barras aparecen al pasar de En cola a Procesando y
 desaparecen al recibir Listo o Error. También verifica que cada barra se identifica
-por partido y carece de valor porcentual.
+por partido y que muestran el porcentaje total y el tiempo restante estimado.
