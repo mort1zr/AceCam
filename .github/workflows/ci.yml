@@ -523,6 +523,18 @@ jobs:
           EXPECTED_VERSION: ${{ github.sha }}
         run: node scripts/checkDeploy.mjs "https://${FIREBASE_PROJECT}.web.app/" "$EXPECTED_VERSION"
 
+      # PCIT-215: la web publicada envía las cabeceras de seguridad de firebase.json con su
+      # valor mínimo (CSP, HSTS de 1 año, nosniff, DENY, Referrer-Policy, Permissions-Policy
+      # y COOP). En una PR, sobre la vista previa; en main, sobre producción. Si una falta o
+      # se debilita, el despliegue falla e indica cuál.
+      - name: Comprobar las cabeceras de seguridad
+        id: headers
+        if: steps.config.outputs.ok == 'true' && steps.hosting.outcome == 'success'
+        working-directory: web
+        env:
+          URL: ${{ github.event_name == 'pull_request' && steps.hosting.outputs.details_url || format('https://{0}.web.app/', env.FIREBASE_PROJECT) }}
+        run: node scripts/checkHeaders.mjs "$URL" "${URL%/}/privacidad"
+
       # PCIT-200: tabla con lo que se publicó en la página del run, también si algo falló.
       - name: Resumen del despliegue
         if: always() && steps.config.outputs.ok == 'true'

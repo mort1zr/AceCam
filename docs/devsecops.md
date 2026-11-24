@@ -26,7 +26,7 @@ seguridad, SAST y OWASP corren siempre, sin importar la ruta.
 | `owasp-zap-baseline` | Solo tras desplegar en main | DAST (ZAP) contra la web ya publicada | No; informa |
 | `codeql` | Siempre | SAST de JavaScript, Python y los workflows | Los hallazgos aparecen en la PR |
 | `scorecard` | push a main y cada lunes | OpenSSF Scorecard: puntúa las prácticas del repo | No; informa |
-| `deploy` | Tras pasar `web-tests`/`web-reglas` | Firebase Hosting: vista previa (PR) o producción y reglas (main) | Despliega solo si la CI pasa |
+| `deploy` | Tras pasar `web-tests`/`web-reglas` | Firebase Hosting: vista previa (PR) o producción y reglas (main). Después comprueba la versión publicada y las cabeceras de seguridad (PCIT-215) | Despliega solo si la CI pasa; falla si una cabecera falta o se debilita |
 | `imagen` / `desplegar` | PR y push que tocan `web/server/azure-videos/` o `model/` | Construye y (en main) despliega la API de videos en Azure Container Apps | Despliega solo si la imagen pasa |
 | `imagen-worker` / `desplegar-worker` | Igual que `imagen`/`desplegar` | Construye y (en main) despliega el worker del modelo como tarea programada en Azure | Igual |
 | Dependabot | Cada lunes | PRs para actualizar pip, npm y Actions | Pasan por el mismo pipeline |
@@ -190,6 +190,7 @@ la variable `DEPLOY_STORAGE_RULES` con valor `true` para publicar también `stor
 | OWASP Dependency-Check | Abre el hallazgo en **Security → Code scanning**. Si el CVE no aplica a cómo usamos la librería, descártalo con justificación; si no, actualiza la dependencia |
 | OWASP ZAP Baseline | No bloquea: revisa el resumen del job en Actions. Los falsos positivos comunes (cabeceras informativas, cookies de terceros) se documentan en el propio resumen |
 | `check:csp` | Copia el hash que muestra el error en `script-src` de `firebase.json` |
+| Cabeceras de seguridad (`checkHeaders.mjs`, PCIT-215) | El error dice qué cabecera falta o se debilitó en la web publicada. Corrígela en `hosting.headers` de `firebase.json` (fuente `**`). Para probar a mano: `npm run check:headers -- https://acecam-e93a2.web.app/` |
 | `download_models.py`: `sha256 no coincide` | **No uses ese archivo.** Vuelve a descargarlo con `--force`. Si se repite, el origen cambió: avisa al equipo antes de registrar un hash nuevo |
 
 **Base NVD.** La acción de `owasp-dependency-check` usa una imagen que ya trae la base
