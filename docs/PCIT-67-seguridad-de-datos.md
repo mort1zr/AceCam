@@ -200,6 +200,14 @@ mismos datos. Si una regla cambia sin actualizar la matriz, falla la celda con s
 rol y su operación, por ejemplo
 `players.get · leer players/p-a > otroEntrenador → denegado`.
 
+**Las filas `storage.*` también se prueban contra Azure (PCIT-228).** En producción los
+videos están en Azure Blob y quien decide es la API de videos, no `storage.rules`.
+`tests/azure/accessMatrix.azure.test.js` recorre las mismas filas y roles: pide el enlace
+a la API y lo usa en Azurite. Única diferencia, a propósito y más estricta:
+**`storage.videoDelete` en Azure no lo permite nadie**, porque la API solo firma enlaces
+para subir o leer; el borrado será parte de PCIT-221. La prueba falla si aparece
+cualquier otra diferencia, o si una diferencia concede un permiso que la matriz no da.
+
 Para cambiar un permiso: edita la regla, actualiza su fila en `accessMatrix.js`,
 ejecuta `node scripts/accessMatrixTable.mjs --write` desde `web/` y
 `npm run test:rules`.
