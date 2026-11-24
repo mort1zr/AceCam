@@ -30,7 +30,10 @@ export function replaceSection(text, table) {
   const start = text.indexOf(START)
   const end = text.indexOf(END)
   if (start < 0 || end < start) throw new Error(`Faltan los marcadores de la matriz en ${DOC_PATH}`)
-  return `${text.slice(0, start + START.length)}\n\n${table}\n\n${text.slice(end)}`
+  const sectionStart = start + START.length
+  const lineEnding = text.startsWith('\r\n', sectionStart) ? '\r\n' : '\n'
+  const section = `\n\n${table}\n\n`.replaceAll('\n', lineEnding)
+  return `${text.slice(0, sectionStart)}${section}${text.slice(end)}`
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

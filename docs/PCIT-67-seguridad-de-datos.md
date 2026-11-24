@@ -189,6 +189,8 @@ Para cambiar un permiso: edita la regla, actualiza su fila en `accessMatrix.js`,
 ejecuta `node scripts/accessMatrixTable.mjs --write` desde `web/` y
 `npm run test:rules`.
 
+El generador conserva los finales de línea de la tabla (LF o CRLF).
+
 ## 3. Cobertura de las reglas
 
 Ninguna regla de Firestore entra sin pruebas. `npm run test:rules` hace, en orden:

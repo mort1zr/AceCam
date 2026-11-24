@@ -23,4 +23,13 @@ describe('matriz de acceso (PCIT-210)', () => {
     const text = readFileSync(DOC_PATH, 'utf8')
     expect(replaceSection(text, accessMatrixTable()), 'Ejecuta: node scripts/accessMatrixTable.mjs --write').toBe(text)
   })
+
+  it.each([['LF', '\n'], ['CRLF', '\r\n']])('regenera la tabla con los finales de línea %s del documento', (_, lineEnding) => {
+    const text = readFileSync(DOC_PATH, 'utf8').replace(/\r?\n/g, lineEnding)
+    const table = accessMatrixTable([{ recurso: 'x', operacion: 'leer', permitido: ['admin'], motivo: 'Prueba' }], ['admin'])
+    const updated = replaceSection(text, table)
+    expect(updated).not.toBe(text)
+    expect(updated).toContain(`${lineEnding}${table.replaceAll('\n', lineEnding)}${lineEnding}`)
+    expect(replaceSection(updated, accessMatrixTable())).toBe(text)
+  })
 })
