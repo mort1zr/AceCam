@@ -3,6 +3,7 @@ import { SegmentedControl } from '../ui'
 import { analysisErrorMessage, formatBytes, validateAnalysis } from '../../lib/analysis.js'
 import { validateLocalVideo } from '../../lib/validateLocalVideo.js'
 import { MAX_VIDEO_FPS, MIN_VIDEO_FPS, MIN_VIDEO_HEIGHT, MIN_VIDEO_WIDTH } from '../../lib/videoRequirements.js'
+import TennisProgress from './TennisProgress.jsx'
 
 const initial = { sourceType: 'file', file: null, url: '', playerPosition: '', opponent: '', tournament: '', matchDate: '', result: '' }
 
@@ -14,6 +15,11 @@ export default function AnalysisForm({ service, players, playersLoading, players
   const [success, setSuccess] = useState('')
   const [busy, setBusy] = useState(false)
   const [progress, setProgress] = useState({ phase: 'idle', percent: 0 })
+  const checking = progress.phase === 'checking'
+  const saving = progress.phase === 'saving'
+  const importing = values.sourceType === 'link'
+  const transferTitle = checking ? 'Verificando el video…' : saving ? 'Guardando partido…' : importing ? 'Importando video…' : 'Cargando video…'
+  const transferPercent = checking || (importing && progress.percent === 0) ? null : Math.round(progress.percent)
   const request = useRef(null)
   const controller = useRef(null)
   const active = useRef(false)
@@ -199,17 +205,15 @@ export default function AnalysisForm({ service, players, playersLoading, players
       </fieldset>
       {busy && (
         <div className="analysis-progress">
-          <div role="status">
-            {progress.phase === 'checking' ? <p>Verificando resolución y duración…</p> : (
-              <>
-                <p>{progress.phase === 'saving' ? 'Guardando partido…' : 'Cargando video…'}</p>
-                <progress aria-label="Progreso de carga" max={100} value={progress.percent} />
-                <span>{Math.round(progress.percent)} %</span>
-              </>
-            )}
+          <div className="analysis-progress-body">
+            <div className="analysis-progress-heading">
+              <span role="status">{transferTitle}</span>
+              {transferPercent !== null && <strong className="analysis-progress-value">{transferPercent} %</strong>}
+            </div>
+            <TennisProgress label={checking ? 'Verificación del video' : 'Progreso de carga'} value={transferPercent} />
           </div>
-          <button type="button" className="players-button-secondary" disabled={progress.phase === 'saving'} onClick={() => controller.current?.abort()}>
-            {progress.phase === 'checking' ? 'Cancelar verificación' : 'Cancelar carga'}
+          <button type="button" className="players-button-secondary" disabled={saving} onClick={() => controller.current?.abort()}>
+            {checking ? 'Cancelar verificación' : 'Cancelar carga'}
           </button>
         </div>
       )}
