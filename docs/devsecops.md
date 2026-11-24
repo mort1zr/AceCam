@@ -198,7 +198,72 @@ repositorio completo (`path: .`) con `--enableExperimental`, que activa el anali
 `requirements.txt`. Esa acción pasa cada entrada como un solo argumento: no admite listas
 de rutas ni varias opciones en `others`.
 
-## 5. Pendientes
+## 5. Azure: videos y worker (PCIT-222, PCIT-228)
+
+Firebase sigue con la web, Auth y Firestore. Los videos y el análisis están en Azure
+(suscripción *Azure for Students*, región **Chile Central**). Detalle de la puesta en marcha y
+costos en [PCIT-222 · Videos en Azure](PCIT-222-videos-en-azure.md).
+
+### 5.1 Recursos
+
+| Recurso | Nombre | Para qué |
+| --- | --- | --- |
+| Grupo de recursos | `acecam-rg` | Contiene todo lo de AceCam en Azure |
+| Cuenta de almacenamiento | `acecamvideosfba600`, contenedor privado `videos` | Videos originales y procesados. *Soft delete* de 7 días |
+| Entorno de Container Apps | `acecam-env` | Donde corren la API y el worker |
+| Container App | `acecam-videos-api` | API que entrega enlaces temporales (SAS) para subir y ver videos |
+| Container Apps Job | `acecam-worker` | El modelo: cada 5 min procesa un partido en cola. 2 vCPU, 4 GiB, máximo 1 h, videos de hasta 90 s (`WORKER_MAX_SECONDS` en `ci.yml`) |
+| Identidad administrada | `acecam-github` | GitHub Actions entra en Azure con ella (OIDC, sin contraseña). Contributor sobre `acecam-rg` |
+| Identidad administrada | `acecam-videos-api` | La usan la API y el worker para leer y escribir videos. Storage Blob Data Contributor solo sobre la cuenta de almacenamiento |
+| Log Analytics | `acecam-logs` | Registros de la API y el worker, sin datos personales |
+
+### 5.2 Variables y secretos de GitHub
+
+| Nombre | Tipo | Valor o contenido |
+| --- | --- | --- |
+| `AZURE_CLIENT_ID` | Variable | Client ID de `acecam-github` |
+| `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID` | Variable | Inquilino y suscripción de Azure for Students |
+| `AZURE_RESOURCE_GROUP`, `AZURE_STORAGE_ACCOUNT`, `AZURE_CONTAINERAPPS_ENV` | Variable | `acecam-rg`, `acecamvideosfba600`, `acecam-env` |
+| `AZURE_VIDEOS_API_IDENTITY_ID`, `AZURE_VIDEOS_API_IDENTITY_CLIENT_ID` | Variable | ID de recurso y client ID de `acecam-videos-api` |
+| `VITE_VIDEO_API_URL` | Variable | URL de la API de videos. Vacía, la web vuelve a Firebase Storage |
+| `FIREBASE_SERVICE_ACCOUNT_AZURE` | Secreto | Cuenta de servicio de Firebase de **solo lectura** para la API |
+| `FIREBASE_SERVICE_ACCOUNT_WORKER` | Secreto | Cuenta de servicio de Firebase con escritura en Firestore para el worker |
+
+### 5.3 Qué hacer si falla
+
+| Falla | Causa probable y qué hacer |
+| --- | --- |
+| "Iniciar sesión en Azure": `AADSTS700213 No matching federated identity record` | El sujeto que envía GitHub no está en las credenciales federadas de `acecam-github`. Copia el *subject claim* del log y créalo tal cual (`az identity federated-credential create … --subject "<subject>"`). **Pasa cada vez que se renombra el repositorio**: el sujeto lleva el nombre, por ejemplo `repo:mort1zr@138200154/AceCam@1443135943:environment:production` |
+| "Comprobar configuración" avisa y salta el despliegue | Falta una variable o un secreto de 5.2. Créalo y lanza **Run workflow** sobre `main` |
+| La API no responde (`/healthz`) | Portal → `acecam-videos-api` → Registros. Suele ser el secreto `FIREBASE_SERVICE_ACCOUNT_AZURE` vencido o revocado |
+| Un partido se queda **En cola** | Portal → Trabajos de Container Apps → `acecam-worker` → Historial de ejecuciones. Si no hay ejecuciones, la tarea no existe: relanza el despliegue |
+| Un partido pasa a **Error** por duración | El video supera `WORKER_MAX_SECONDS`. Es lo esperado en CPU; para videos más largos hace falta GPU o subir el tope y el tiempo máximo de la tarea, midiendo el costo |
+| El crédito baja rápido | Revisa en Cost Management qué recurso consume. Lo habitual es el worker con videos largos |
+
+### 5.4 Pasos manuales en el portal (una sola vez)
+
+Los hace una persona con permisos en la suscripción (Cloud Shell, Bash).
+
+**Desactivar el acceso por clave compartida.** La API firma los enlaces con la identidad
+(*user delegation SAS*) y el worker usa su identidad: ninguno usa la clave de la cuenta.
+Sin la clave, quien la obtuviera no podría leer los videos.
+
+```bash
+az storage account update -n acecamvideosfba600 -g acecam-rg --allow-shared-key-access false
+az storage account show -n acecamvideosfba600 -g acecam-rg --query allowSharedKeyAccess
+```
+
+Debe responder `false`. Después, para ver los videos en el portal, elige **Cuenta de usuario
+de Microsoft Entra** como método de autenticación del contenedor; la cuenta necesita el
+rol *Storage Blob Data Reader*. Para deshacerlo, el mismo comando con `true`.
+
+**Alerta de presupuesto.** Portal → **Cost Management** → **Presupuestos** → **Agregar**:
+ámbito la suscripción, mensual, un importe por debajo del crédito mensual que quieras
+gastar, y alertas al 50 %, 80 % y 100 % a los correos del equipo. Si la suscripción no
+permite crear presupuestos, revisa el saldo del crédito en la página de la suscripción
+cada semana.
+
+## 6. Pendientes
 
 **Registrar el sha256 de los pesos de Drive.**
 
