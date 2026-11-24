@@ -6,8 +6,6 @@
 import {
   createUserWithEmailAndPassword,
   deleteUser,
-  reload,
-  sendEmailVerification,
   signInWithEmailAndPassword,
   signOut,
   updateProfile,
@@ -72,9 +70,6 @@ const ERROR_MESSAGES = {
   'auth/too-many-requests': 'Demasiados intentos. Espera unos minutos e inténtalo de nuevo.',
   'auth/network-request-failed': 'No hay conexión con el servidor. Revisa tu internet.',
   'permission-denied': 'No pudimos crear tu organización. Inténtalo de nuevo.',
-  'auth/email-not-verified':
-    'Todavía no verificaste tu correo. Abre el enlace que te enviamos y vuelve a intentarlo.',
-  'auth/no-session': 'Tu sesión terminó. Inicia sesión de nuevo.',
   'invite/not-found':
     'No encontramos una invitación pendiente para este correo. Pide que te inviten de nuevo o crea tu propia organización.',
 }
@@ -112,25 +107,20 @@ export function createAuthService({ auth, db }) {
     return { user, orgId: invite.orgId, joined: true }
   }
 
-  const verificationSettings = continueUrl => (continueUrl ? { url: continueUrl } : undefined)
-
   /**
-   * Crea la cuenta y su ficha en users, con su propia organización.
-   * Con `invited` (enlace de invitación, PCIT-40) solo crea la cuenta y envía el correo de
-   * verificación: las reglas no dejan leer ni aceptar la invitación hasta verificarlo
-   * (PCIT-220). La unión al club la termina completeInvitedSignup().
+   * Crea la cuenta y su ficha en users. Si su correo tiene una invitación pendiente,
+   * se une a esa organización con el rol invitado (PCIT-40); si no, crea la suya.
    * La organización y la ficha van en el mismo lote, como exigen las reglas.
    * Si algo falla, borra la cuenta de Auth para que pueda volver a intentarlo.
    */
-  async function registerCoach({ name, email, password, orgName, invited = false, continueUrl }) {
+  async function registerCoach({ name, email, password, orgName, invited = false }) {
     const displayName = clean(name)
     const { user } = await createUserWithEmailAndPassword(auth, normalizeEmail(email), password)
     try {
       await updateProfile(user, { displayName })
-      if (invited) {
-        await sendEmailVerification(user, verificationSettings(continueUrl))
-        return { user, orgId: null, joined: false, verificationPending: true }
-      }
+      const invite = await pendingInvite(user)
+      if (invite) return await joinInvitedOrg(user, displayName, invite)
+      if (invited) throw Object.assign(new Error('Invite not found'), { code: 'invite/not-found' })
       const orgRef = doc(collection(db, COLLECTIONS.orgs))
       const batch = writeBatch(db)
       batch.set(orgRef, {
@@ -156,36 +146,10 @@ export function createAuthService({ auth, db }) {
     }
   }
 
-  /**
-   * Termina el registro por invitación cuando el correo ya está verificado (PCIT-220).
-   * Renueva el token para que lleve email_verified y se une al club en un lote.
-   * Si no hay invitación pendiente, borra la cuenta para que pueda registrarse de nuevo.
-   */
-  async function completeInvitedSignup() {
-    const user = auth.currentUser
-    if (!user) throw Object.assign(new Error('No session'), { code: 'auth/no-session' })
-    await reload(user)
-    if (!user.emailVerified) throw Object.assign(new Error('Email not verified'), { code: 'auth/email-not-verified' })
-    await user.getIdToken(true)
-    const invite = await pendingInvite(user)
-    if (!invite) {
-      await deleteUser(user).catch(() => signOut(auth))
-      throw Object.assign(new Error('Invite not found'), { code: 'invite/not-found' })
-    }
-    return joinInvitedOrg(user, clean(user.displayName) || user.email, invite)
-  }
-
-  /** Vuelve a enviar el correo de verificación a la cuenta con sesión. */
-  async function resendVerification({ continueUrl } = {}) {
-    const user = auth.currentUser
-    if (!user) throw Object.assign(new Error('No session'), { code: 'auth/no-session' })
-    await sendEmailVerification(user, verificationSettings(continueUrl))
-  }
-
   const login = ({ email, password }) =>
     signInWithEmailAndPassword(auth, normalizeEmail(email), password)
 
   const logout = () => signOut(auth)
 
-  return { registerCoach, completeInvitedSignup, resendVerification, login, logout }
+  return { registerCoach, login, logout }
 }

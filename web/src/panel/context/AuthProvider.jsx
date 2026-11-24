@@ -13,7 +13,7 @@ const cargarServicio = () =>
   ))
 
 const service = Object.fromEntries(
-  ['registerCoach', 'completeInvitedSignup', 'resendVerification', 'login', 'logout'].map((metodo) => [
+  ['registerCoach', 'login', 'logout'].map((metodo) => [
     metodo,
     (...datos) => cargarServicio().then((s) => s[metodo](...datos)),
   ]),

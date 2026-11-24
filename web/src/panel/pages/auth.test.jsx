@@ -162,45 +162,6 @@ describe('Registro con invitación (PCIT-40)', () => {
   })
 })
 
-describe('Verificar el correo de la invitación (PCIT-220)', () => {
-  const pendiente = (overrides = {}) => session({
-    user: { uid: 'u1', email: 'ana@club.pe', emailVerified: false },
-    completeInvitedSignup: vi.fn(), resendVerification: vi.fn(),
-    ...overrides,
-  })
-
-  it('una cuenta sin ficha ve cómo verificar el correo y no entra al panel', () => {
-    renderApp('/inicio', pendiente())
-    expect(screen.getByRole('heading', { name: 'Verifica tu correo' })).toBeTruthy()
-    expect(screen.getByText(/ana@club\.pe/)).toBeTruthy()
-    expect(screen.queryByText('Pantalla de inicio')).toBeNull()
-  })
-
-  it('reenvía el correo de verificación y lo confirma', async () => {
-    const resendVerification = vi.fn().mockResolvedValue()
-    renderApp('/inicio', pendiente({ resendVerification }))
-    await userEvent.setup().click(screen.getByRole('button', { name: 'Reenviar el correo' }))
-    expect(resendVerification).toHaveBeenCalledWith({ continueUrl: expect.stringMatching(/\/inicio$/) })
-    expect(screen.getByRole('status').textContent).toContain('Te enviamos otro correo')
-  })
-
-  it('si todavía no verificó, lo explica sin mostrar el error técnico', async () => {
-    const completeInvitedSignup = vi.fn().mockRejectedValue({ code: 'auth/email-not-verified' })
-    renderApp('/inicio', pendiente({ completeInvitedSignup }))
-    await userEvent.setup().click(screen.getByRole('button', { name: 'Ya verifiqué mi correo' }))
-    expect(completeInvitedSignup).toHaveBeenCalled()
-    expect(screen.getByRole('alert').textContent).toContain('Todavía no verificaste tu correo')
-  })
-
-  it('con el correo verificado no ofrece reenviar y permite cerrar sesión', async () => {
-    const logout = vi.fn()
-    renderApp('/inicio', pendiente({ user: { uid: 'u1', email: 'ana@club.pe', emailVerified: true }, logout }))
-    expect(screen.queryByRole('button', { name: 'Reenviar el correo' })).toBeNull()
-    await userEvent.setup().click(screen.getByRole('button', { name: 'Cerrar sesión' }))
-    expect(logout).toHaveBeenCalled()
-  })
-})
-
 describe('Acceso', () => {
   it('el switch alterna entre iniciar sesión y crear cuenta', async () => {
     renderApp('/login', session())

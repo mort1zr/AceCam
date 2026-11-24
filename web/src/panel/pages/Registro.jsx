@@ -80,8 +80,7 @@ export default function Registro() {
     if (Object.keys(found).length) return
     setSubmitting(true)
     try {
-      // Con invitación, el enlace del correo de verificación vuelve al panel (PCIT-220).
-      await registerCoach({ ...values, invited, continueUrl: `${window.location.origin}/inicio` })
+      await registerCoach({ ...values, invited })
       if (acceso?.entrar) await acceso.entrar(destino)
       else navigate(destino, { replace: true })
     } catch (error) {

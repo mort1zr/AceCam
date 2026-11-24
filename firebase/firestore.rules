@@ -148,12 +148,6 @@ service cloud.firestore {
 
     // ---------- Invitaciones (PCIT-40) ----------
 
-    // PCIT-220: el correo de la sesión está verificado. Sin esto, quien conozca el correo
-    // de una persona invitada podría registrarse antes que ella y tomar su invitación.
-    function emailVerified() {
-      return request.auth.token.email_verified == true;
-    }
-
     function invitePath(email) {
       return /databases/$(database)/documents/invites/$(email);
     }
@@ -200,10 +194,8 @@ service cloud.firestore {
         && getAfter(/databases/$(database)/documents/orgs/$(request.resource.data.orgId)).data.ownerId == uid;
 
       // O se une a una organización que lo invitó (PCIT-40): mismo orgId y rol que la
-      // invitación a su correo, que en el mismo lote pasa a 'aceptada'. Solo con el
-      // correo verificado (PCIT-220).
+      // invitación a su correo, que en el mismo lote pasa a 'aceptada'.
       allow create: if signedIn()
-        && emailVerified()
         && uid == request.auth.uid
         && request.resource.data.keys().hasAll(['email', 'displayName', 'orgId', 'role', 'createdAt'])
         && request.resource.data.keys().hasOnly(['email', 'displayName', 'orgId', 'role', 'jobTitle', 'createdAt'])
@@ -289,10 +281,8 @@ service cloud.firestore {
     // la persona invitada solo lee la suya y la acepta al registrarse.
 
     match /invites/{email} {
-      // La persona invitada la lee solo con el correo verificado (PCIT-220).
       allow get: if signedIn()
-        && ((email == request.auth.token.email && emailVerified())
-          || (resource != null && canInvite(resource.data.orgId)));
+        && (email == request.auth.token.email || (resource != null && canInvite(resource.data.orgId)));
       allow list: if canInvite(resource.data.orgId);
 
       allow create: if canInvite(request.resource.data.orgId)
@@ -308,7 +298,6 @@ service cloud.firestore {
       // Aceptar: solo la persona invitada, en el mismo lote que crea su ficha en users.
       allow update: if signedIn()
         && email == request.auth.token.email
-        && emailVerified()
         && resource.data.status == 'pendiente'
         && onlyChanges(['status', 'acceptedBy', 'acceptedAt'])
         && request.resource.data.status == 'aceptada'
