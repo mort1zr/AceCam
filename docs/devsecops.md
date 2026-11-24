@@ -31,6 +31,10 @@ seguridad, SAST y OWASP corren siempre, sin importar la ruta.
 | `imagen-worker` / `desplegar-worker` | Igual que `imagen`/`desplegar` | Construye y (en main) despliega el worker del modelo como tarea programada en Azure | Igual |
 | Dependabot | Cada lunes | PRs para actualizar pip, npm y Actions | Pasan por el mismo pipeline |
 
+**Volver a desplegar sin un push:** Actions → Pipeline → **Run workflow** sobre `main`
+ejecuta todo, incluidos los despliegues de Firebase y Azure (sirve tras arreglar una
+variable, un secreto o una credencial de Azure). Lanzado sobre otra rama no despliega.
+
 Configuración específica de Azure (variables `AZURE_*` y secretos
 `FIREBASE_SERVICE_ACCOUNT_AZURE`/`_WORKER`): ver
 [PCIT-222 · Videos en Azure](PCIT-222-videos-en-azure.md).

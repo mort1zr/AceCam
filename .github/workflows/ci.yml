@@ -16,10 +16,12 @@ name: Pipeline
 # cambió web/ o firebase/, y los de Azure solo si cambió web/server/azure-videos/ o
 # model/ — tanto en pull_request como en push a main (paths-filter compara contra la
 # base del PR o contra el commit anterior), igual que antes de unificar los workflows.
-# En schedule y workflow_dispatch no hay un "antes" con qué comparar, así que esos jobs
-# no corren (tampoco corrían antes: ninguno de los workflows de origen tenía disparador
-# schedule). Los jobs de seguridad, SAST y OWASP no dependen de la ruta: corren siempre,
-# como antes.
+# En schedule no hay un "antes" con qué comparar, así que esos jobs no corren.
+# workflow_dispatch sobre main ejecuta todo (pruebas y despliegues de Firebase y Azure):
+# es la forma de volver a desplegar sin un push, por ejemplo tras arreglar una variable
+# o un secreto. Lanzado sobre otra rama no fuerza nada, para no publicar en producción
+# código que no está en main. Los jobs de seguridad, SAST y OWASP no dependen de la
+# ruta: corren siempre, como antes.
 #
 # cancel-in-progress solo en pull_request: una PR con pushes seguidos cancela las
 # corridas viejas, pero un push a main (que puede estar desplegando en Firebase o en
@@ -59,10 +61,11 @@ jobs:
     name: Detectar cambios
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    # Lanzado a mano sobre main, todo cuenta como cambiado (ver disparadores, arriba).
     outputs:
-      modelo: ${{ steps.filtro.outputs.modelo }}
-      web: ${{ steps.filtro.outputs.web }}
-      azure: ${{ steps.filtro.outputs.azure }}
+      modelo: ${{ (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') && 'true' || steps.filtro.outputs.modelo }}
+      web: ${{ (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') && 'true' || steps.filtro.outputs.web }}
+      azure: ${{ (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') && 'true' || steps.filtro.outputs.azure }}
     steps:
       # fetch-depth: 0 (historial completo): con el valor por defecto (1, superficial)
       # paths-filter no tiene con qué comparar en push/schedule y el job falla, lo que
@@ -72,9 +75,9 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       # continue-on-error: en schedule/workflow_dispatch no hay un "antes" claro que
-      # comparar y el paso puede fallar; da igual, porque entonces sus outputs quedan
-      # vacíos (falsy) y los jobs de modelo/web/azure simplemente no corren en esos
-      # eventos, que es el resultado correcto (ver el comentario de disparadores, arriba).
+      # comparar y el paso puede fallar; da igual: en schedule sus outputs quedan vacíos
+      # (falsy) y los jobs de modelo/web/azure no corren, y en workflow_dispatch sobre
+      # main los outputs del job ya valen 'true' (ver el comentario de disparadores, arriba).
       - id: filtro
         continue-on-error: true
         uses: dorny/paths-filter@7b450fff21473bca461d4b92ce414b9d0420d706 # v4.0.2
