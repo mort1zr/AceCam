@@ -280,7 +280,54 @@ gastar, y alertas al 50 %, 80 % y 100 % a los correos del equipo. Si la suscripc
 permite crear presupuestos, revisa el saldo del crédito en la página de la suscripción
 cada semana.
 
-## 6. Pendientes
+## 6. Firebase App Check (PCIT-219)
+
+App Check hace que Firestore acepte solo peticiones que salen de la web de AceCam, con un
+token de reCAPTCHA v3, y no de un bot que copió la configuración pública de Firebase (el
+formulario público de postulación es el punto más expuesto). El código ya está listo
+(`web/src/panel/lib/appCheck.js`) y **no hace nada hasta que exista la variable**
+`VITE_FIREBASE_APPCHECK_SITE_KEY`. Con los emuladores tampoco se activa.
+
+### 6.1 Pasos manuales (propietario del proyecto, @mort1zr)
+
+1. **Clave de reCAPTCHA v3:** en la consola de reCAPTCHA, crea una clave *v3* con los
+   dominios `acecam-e93a2.web.app`, `acecam-e93a2.firebaseapp.com` y `localhost`.
+2. **Registrar la app:** consola de Firebase → **App Check** → **Apps** → la app web →
+   *reCAPTCHA v3*, con la **clave secreta** de reCAPTCHA. La secreta solo va aquí, nunca al
+   repositorio ni a GitHub.
+3. **Variable de GitHub:** `VITE_FIREBASE_APPCHECK_SITE_KEY` con la **clave de sitio**, que es
+   pública y viaja en el JavaScript. Después lanza **Run workflow** sobre `main`.
+4. **Solo monitoreo, de 1 a 2 semanas:** App Check → **APIs** → Cloud Firestore muestra el
+   porcentaje de peticiones verificadas. **No actives la aplicación obligatoria todavía.**
+5. **Obligatorio:** cuando casi todo el tráfico salga verificado, pulsa **Aplicar** en Cloud
+   Firestore (y en Storage si se vuelve a usar para videos). Desde ese momento las peticiones
+   sin token válido se rechazan.
+
+### 6.2 Qué hacer si se rechaza a usuarios reales
+
+- En App Check → APIs → Cloud Firestore, pulsa **Dejar de aplicar**: el efecto es inmediato y
+  vuelve al modo monitoreo. Revisa las métricas antes de reactivarlo.
+- Causas habituales: un bloqueador de anuncios que impide cargar reCAPTCHA, un dominio que no
+  está en la clave de reCAPTCHA o la CSP de `firebase.json` sin los dominios de Google.
+
+### 6.3 Desarrollo, pruebas y CI
+
+- **Emuladores y CI:** App Check no se activa (las pruebas de reglas usan los emuladores).
+- **Desarrollo contra el proyecto real:** registra un token en App Check → *Administrar tokens
+  de depuración* y ponlo en `VITE_FIREBASE_APPCHECK_DEBUG_TOKEN` de tu `web/.env`. La web solo
+  lo usa con `npm run dev`; un build de producción lo ignora para no publicarlo.
+- **Vistas previas de las PR** (`acecam-e93a2--pr…web.app`): su dominio no puede añadirse a la
+  clave de reCAPTCHA, así que con App Check obligatorio una vista previa no podrá leer ni
+  escribir en Firestore. Las pruebas de cabeceras y ZAP siguen funcionando.
+
+### 6.4 Pendiente
+
+La API de videos de Azure todavía no verifica el token de App Check: comprueba la sesión de
+Firebase en cada petición. Verificarlo (`X-Firebase-AppCheck` con `getAppCheck().verifyToken`)
+queda para cuando la importación de YouTube (PCIT-243) esté en `main`, para no chocar con ese
+cambio.
+
+## 7. Pendientes
 
 **Registrar el sha256 de los pesos de Drive.**
 
