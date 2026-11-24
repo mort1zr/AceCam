@@ -31,6 +31,10 @@ seguridad, SAST y OWASP corren siempre, sin importar la ruta.
 | `imagen-worker` / `desplegar-worker` | Igual que `imagen`/`desplegar` | Construye y (en main) despliega el worker del modelo como tarea programada en Azure | Igual |
 | Dependabot | Cada lunes | PRs para actualizar pip, npm y Actions | Pasan por el mismo pipeline |
 
+**Volver a desplegar sin un push:** Actions → Pipeline → **Run workflow** sobre `main`
+ejecuta todo, incluidos los despliegues de Firebase y Azure (sirve tras arreglar una
+variable, un secreto o una credencial de Azure). Lanzado sobre otra rama no despliega.
+
 Configuración específica de Azure (variables `AZURE_*` y secretos
 `FIREBASE_SERVICE_ACCOUNT_AZURE`/`_WORKER`): ver
 [PCIT-222 · Videos en Azure](PCIT-222-videos-en-azure.md).
@@ -183,16 +187,16 @@ la variable `DEPLOY_STORAGE_RULES` con valor `true` para publicar también `stor
 | npm audit | `npm audit fix` en `web/`. Si exige una versión mayor, revisa el changelog antes |
 | Dependency Review | La PR añade una dependencia vulnerable: elige otra versión |
 | CodeQL | Abre el hallazgo en **Security → Code scanning**: explica el flujo de datos. Corrígelo o descártalo con justificación |
-| OWASP Dependency-Check | Abre el hallazgo en **Security → Code scanning**. Si el CVE es de una versión que ya no se usa (`--enableRetired`), puede ser ruido; si no, actualiza la dependencia |
+| OWASP Dependency-Check | Abre el hallazgo en **Security → Code scanning**. Si el CVE no aplica a cómo usamos la librería, descártalo con justificación; si no, actualiza la dependencia |
 | OWASP ZAP Baseline | No bloquea: revisa el resumen del job en Actions. Los falsos positivos comunes (cabeceras informativas, cookies de terceros) se documentan en el propio resumen |
 | `check:csp` | Copia el hash que muestra el error en `script-src` de `firebase.json` |
 | `download_models.py`: `sha256 no coincide` | **No uses ese archivo.** Vuelve a descargarlo con `--force`. Si se repite, el origen cambió: avisa al equipo antes de registrar un hash nuevo |
 
-**`NVD_API_KEY` (opcional).** `owasp-dependency-check` descarga la base NVD en cada corrida;
-sin clave, el límite de peticiones hace que tarde más (la caché de GitHub Actions ayuda,
-pero expira). Pide una clave gratis en https://nvd.nist.gov/developers/request-an-api-key
-y guárdala en **GitHub → Settings → Secrets and variables → Actions → New repository
-secret** con el nombre `NVD_API_KEY`.
+**Base NVD.** La acción de `owasp-dependency-check` usa una imagen que ya trae la base
+NVD actualizada y corre con `--noupdate`: no necesita caché ni `NVD_API_KEY`. Escanea el
+repositorio completo (`path: .`) con `--enableExperimental`, que activa el analizador de
+`requirements.txt`. Esa acción pasa cada entrada como un solo argumento: no admite listas
+de rutas ni varias opciones en `others`.
 
 ## 5. Pendientes
 
