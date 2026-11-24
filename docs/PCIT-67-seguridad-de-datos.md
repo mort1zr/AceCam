@@ -259,14 +259,14 @@ con los hallazgos del inventario (sección 1). Cada hallazgo tiene una decisión
 | R1 | **Invitaciones sin verificar el correo.** El registro con correo y contraseña no verifica el correo. Quien conozca el correo invitado puede registrarse antes que la persona, leer `invites/{correo}` y aceptar la invitación, aunque sea de administrador | **Alto** | **Pendiente: PCIT-220** (Sprint 5). Exige cambiar el registro en la web y las reglas a la vez. Mientras tanto: invitar solo correos de confianza y revisar `acceptedBy` |
 | R2 | **El equipo podía reescribir cualquier campo de una postulación**: ciudad, mensaje, videos, el apoderado de un menor… La regla solo impedía cambiar unos pocos campos | Medio | **Corregido.** El equipo solo cambia `status`, `internalNotes` (hasta 2000 caracteres), `reviewedBy` (solo con su propio UID) y `updatedAt`. La vinculación de jugador sigue en su regla aparte |
 | R3 | **El alta manual de postulaciones casi no validaba**: admitía cualquier campo y un menor sin apoderado | Medio | **Corregido.** Mismos campos y validaciones que una postulación importada de Google, con la autorización firmada por quien la registra y apoderado obligatorio para menores. La web no usa esta vía; queda cerrada a datos válidos |
-| R4 | **No hay borrado real ni plazos de conservación** (inventario 1, 2, 3 y 7). La política de privacidad promete borrar en 30 días y reconoce los derechos ARCO | Medio | **Pendiente: PCIT-221** (Sprint 5). Mientras tanto, procedimiento manual (abajo) |
+| R4 | **No hay borrado real ni plazos de conservación** (inventario 1, 2, 3 y 7). La política de privacidad promete borrar en 30 días y reconoce los derechos ARCO | Medio | **Corregido en PCIT-221.** Comando `scripts/borrarDatos.mjs` (Firestore, Storage, Azure y Auth) y plazos de conservación (abajo) |
 | R5 | **El administrador de plataforma lee usuarios y organizaciones de todos los clubes** (PCIT-188) | Medio | **Aceptado.** La administración (PCIT-189) lo necesita. Solo lee `users`, `orgs` y `usage`; la matriz prueba que **no** lee jugadores, partidos, postulaciones, notas ni videos. El permiso solo se concede desde la consola y los cambios quedan en la bitácora (PCIT-203) |
 | R6 | **Formulario público sin sesión**: posible spam de postulaciones | Medio | **Mitigado.** Enlace activo obligatorio, validación estricta de cada campo, campo trampa (PCIT-185). Se completa con App Check (PCIT-219) |
 | R7 | **Todos los entrenadores del club ven las postulaciones**, también las de menores | Bajo | **Aceptado.** Reclutamiento es una tarea del equipo. Ningún otro club ni la plataforma las ven (matriz) |
 | R8 | **`matches.opponent` guarda el nombre del rival**, que no dio su autorización | Bajo | **Aceptado.** Es el dato mínimo para identificar el partido y solo lo ven quienes gestionan el partido. Se puede escribir solo un apellido o iniciales |
 | R9 | **Leer un ID que no existe se permite** en `players`, `matches` y `applications`, lo que revela si un ID existe en otro club | Bajo | **Aceptado.** Los IDs son aleatorios de 20 caracteres y el alta de partidos lo necesita. Nunca se devuelven datos ajenos |
 | R10 | **Cualquiera con el ID lee un enlace de postulación** | Bajo | **Aceptado por diseño** (PCIT-54). El documento solo tiene `createdAt`; el ID es aleatorio y listar los enlaces exige ser dueño o administrador |
-| R11 | **La bitácora administrativa no tiene plazo** | Bajo | **Aceptado.** Es de solo añadir; el plazo se define con R4 en PCIT-221 |
+| R11 | **La bitácora administrativa no tiene plazo** | Bajo | **Corregido en PCIT-221.** Plazo de 2 años, con `borrarDatos.mjs --audit-before` |
 
 ### Puntos revisados sin hallazgos
 
@@ -280,19 +280,48 @@ con los hallazgos del inventario (sección 1). Cada hallazgo tiene una decisión
 | Storage | Todo cerrado salvo los videos de partidos; los videos de postulaciones solo se sirven por el servidor, que comprueba la sesión y el club |
 | Reglas sin condición | Ninguna (control de cobertura, sección 3) |
 
-### Procedimiento manual de borrado (hasta PCIT-221)
+### Borrado de datos y plazos de conservación (PCIT-221)
 
-Para una solicitud ARCO o el cierre de una organización, recibida en el correo de
-la política de privacidad, un operador del proyecto, en un máximo de 30 días:
+Una solicitud ARCO o el cierre de una organización se resuelve con **un solo comando**,
+que ejecuta un operador del proyecto desde `web/` en un máximo de 30 días:
 
-1. Identifica en la consola de Firebase la organización (`orgs`) o la persona
-   (`players`, `applications`, `users`).
-2. Borra sus documentos en Firestore, incluidas las subcolecciones (`usage`,
-   `applicationForms`, `recruitmentIntegrations`, `coachNotes`) y las invitaciones.
-3. Borra en Storage la carpeta `orgs/{orgId}/…` o los videos de esa persona
-   (originales, `processed.mp4` y videos de postulaciones).
-4. Borra la cuenta en Authentication.
-5. Responde a la solicitud indicando la fecha del borrado.
+```bash
+node scripts/borrarDatos.mjs --project acecam-e93a2 --org <orgId>          # una organización entera
+node scripts/borrarDatos.mjs --project acecam-e93a2 --player <playerId>    # un jugador (titular de los datos)
+node scripts/borrarDatos.mjs --project acecam-e93a2 --application <appId>  # una postulación
+node scripts/borrarDatos.mjs --project acecam-e93a2 --user <uid>           # un miembro del equipo
+node scripts/borrarDatos.mjs --project acecam-e93a2 --audit-before <AAAA-MM-DD>  # depurar la bitácora
+```
+
+- **Sin `--execute` no borra nada**: muestra el plan (documentos, archivos de Firebase Storage,
+  videos de Azure Blob y cuentas de Auth). Se revisa y se repite con `--execute`.
+- `--out informe.json` guarda la constancia de lo borrado: solo rutas e IDs, sin nombres ni
+  correos. Se adjunta a la respuesta de la solicitud.
+- Borra en este orden: videos (Firebase Storage **y Azure Blob**: original, `processed.mp4` y
+  videos de postulaciones), documentos con sus subcolecciones y, al final, las cuentas. Si se
+  corta, repetir el comando termina el trabajo.
+- `--user` no borra a la dueña de una organización: hay que borrar la organización. Los
+  jugadores y partidos que creó un miembro son del club y se conservan.
+- Credenciales: `GOOGLE_APPLICATION_CREDENTIALS` (cuenta de servicio con permisos de
+  Firestore, Storage y Auth) y `az login` con un rol de datos sobre `acecamvideosfba600`.
+- Probado contra los emuladores y Azurite: `tests/arco/erase.test.js`.
+
+**Ningún video queda huérfano desde la web:** la web no borra partidos ni postulaciones (solo
+marca jugadores como retirados) y, en Azure, la API no firma enlaces de borrado. Todo borrado
+pasa por este comando, que quita el documento y sus videos juntos.
+
+**Plazos de conservación** (también en la política de privacidad):
+
+| Dato | Plazo | Cómo se aplica |
+| --- | --- | --- |
+| Datos de una organización activa | Mientras la cuenta esté activa | — |
+| Cierre de cuenta o solicitud ARCO | Máximo 30 días desde la solicitud | `--org`, `--player`, `--application` o `--user` |
+| Jugador retirado de la plantilla (`deletedAt`) | 12 meses | `--player` |
+| Postulación descartada | 6 meses | `--application` |
+| Bitácora administrativa (`platformAudit`) | 2 años | `--audit-before` con la fecha de hace 2 años |
+
+Los plazos se revisan cada mes. Automatizarlos (una tarea programada) queda para cuando
+el proyecto tenga un entorno de servidor con credenciales propias.
 
 ### Pruebas
 

@@ -58,6 +58,7 @@ const textos = {
         titulo: 'Cuánto tiempo los conservamos',
         contenido: [
           'Guardamos los datos mientras la cuenta de la organización esté activa. Si la organización cierra su cuenta o pide la eliminación, borramos sus datos y videos en un plazo máximo de 30 días, salvo lo que la ley nos obligue a conservar.',
+          'Además, borramos los datos y videos de un jugador retirado de la plantilla a los 12 meses, las postulaciones descartadas a los 6 meses y el registro de cambios administrativos a los 2 años.',
         ],
       },
       {
@@ -155,6 +156,7 @@ const textos = {
         titulo: 'How long we keep it',
         contenido: [
           'We keep data while the organization’s account is active. If the organization closes its account or asks for deletion, we delete its data and videos within 30 days, except what the law requires us to keep.',
+          'We also delete the data and videos of a player removed from the roster after 12 months, rejected applications after 6 months, and the log of administrative changes after 2 years.',
         ],
       },
       {
