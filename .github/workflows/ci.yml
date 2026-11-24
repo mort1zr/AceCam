@@ -340,23 +340,40 @@ jobs:
         with:
           sarif_file: reports/dependency-check-report.sarif
 
+  # PCIT-214: ZAP Baseline (DAST) contra la vista previa de cada PR y contra producción en main.
+  # .zap/rules.tsv decide qué bloquea: un hallazgo FAIL hace fallar el job (y la PR); los
+  # avisos (WARN) no, gracias a -I. El informe queda como artefacto y su resumen en el run.
   owasp-zap-baseline:
     name: "OWASP: ZAP Baseline (DAST)"
     needs: deploy
-    if: github.ref == 'refs/heads/main' && needs.deploy.result == 'success'
+    if: |
+      needs.deploy.result == 'success'
+      && (github.ref == 'refs/heads/main' || (github.event_name == 'pull_request' && needs.deploy.outputs.preview_url != ''))
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
       contents: read
-      issues: write
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: .zap
       - name: ZAP Baseline Scan
         uses: zaproxy/action-baseline@de8ad967d3548d44ef623df22cf95c3b0baf8b25 # v0.15.0
         with:
-          target: "https://acecam-e93a2.web.app"
-          cmd_options: "-a"
+          target: ${{ github.event_name == 'pull_request' && needs.deploy.outputs.preview_url || 'https://acecam-e93a2.web.app' }}
+          rules_file_name: .zap/rules.tsv
+          cmd_options: "-a -I"
           allow_issue_writing: false
-          fail_action: false
+          fail_action: true
+      - name: Resumen de ZAP
+        if: always()
+        run: |
+          {
+            echo "### OWASP ZAP Baseline"
+            echo ""
+            if [ -f report_md.md ]; then cat report_md.md; else echo "No se generó el informe."; fi
+          } >> "$GITHUB_STEP_SUMMARY"
 
   # -------------------------------------------------------------------------  SAST
 
@@ -437,6 +454,9 @@ jobs:
       contents: read
       checks: write
       pull-requests: write
+    # PCIT-214: ZAP escanea la vista previa de la PR con esta URL.
+    outputs:
+      preview_url: ${{ steps.hosting.outputs.details_url }}
     steps:
       - name: Comprobar configuración
         id: config

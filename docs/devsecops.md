@@ -23,7 +23,7 @@ seguridad, SAST y OWASP corren siempre, sin importar la ruta.
 | `dependencias-web` | Siempre | npm audit de producción | Sí |
 | `revision-dependencias` | Solo PR | Dependency Review: bloquea dependencias nuevas vulnerables | Sí |
 | `owasp-dependency-check` | push a main y cada lunes | SCA contra la base NVD/CVE (ver más abajo) | No; sube a Code scanning |
-| `owasp-zap-baseline` | Solo tras desplegar en main | DAST (ZAP) contra la web ya publicada | No; informa |
+| `owasp-zap-baseline` | Tras desplegar: vista previa de cada PR y producción en main | DAST (ZAP) contra la web publicada, con las reglas de `.zap/rules.tsv` (PCIT-214) | **Sí** con un hallazgo FAIL; los avisos no bloquean |
 | `codeql` | Siempre | SAST de JavaScript, Python y los workflows | Los hallazgos aparecen en la PR |
 | `scorecard` | push a main y cada lunes | OpenSSF Scorecard: puntúa las prácticas del repo | No; informa |
 | `deploy` | Tras pasar `web-tests`/`web-reglas` | Firebase Hosting: vista previa (PR) o producción y reglas (main). Después comprueba la versión publicada y las cabeceras de seguridad (PCIT-215) | Despliega solo si la CI pasa; falla si una cabecera falta o se debilita |
@@ -188,10 +188,24 @@ la variable `DEPLOY_STORAGE_RULES` con valor `true` para publicar también `stor
 | Dependency Review | La PR añade una dependencia vulnerable: elige otra versión |
 | CodeQL | Abre el hallazgo en **Security → Code scanning**: explica el flujo de datos. Corrígelo o descártalo con justificación |
 | OWASP Dependency-Check | Abre el hallazgo en **Security → Code scanning**. Si el CVE no aplica a cómo usamos la librería, descártalo con justificación; si no, actualiza la dependencia |
-| OWASP ZAP Baseline | No bloquea: revisa el resumen del job en Actions. Los falsos positivos comunes (cabeceras informativas, cookies de terceros) se documentan en el propio resumen |
+| OWASP ZAP Baseline | El resumen del job dice qué regla falló y en qué URL; el informe completo está en el artefacto `zap_scan`. Corrige la causa. Si es un falso positivo, cámbialo a WARN en `.zap/rules.tsv` y anota el motivo en la tabla de abajo |
 | `check:csp` | Copia el hash que muestra el error en `script-src` de `firebase.json` |
 | Cabeceras de seguridad (`checkHeaders.mjs`, PCIT-215) | El error dice qué cabecera falta o se debilitó en la web publicada. Corrígela en `hosting.headers` de `firebase.json` (fuente `**`). Para probar a mano: `npm run check:headers -- https://acecam-e93a2.web.app/` |
 | `download_models.py`: `sha256 no coincide` | **No uses ese archivo.** Vuelve a descargarlo con `--force`. Si se repite, el origen cambió: avisa al equipo antes de registrar un hash nuevo |
+
+**ZAP: primera revisión (PCIT-214).** Ejecución sobre producción del 24/11/2026: 63 reglas
+sin hallazgos, 0 FAIL y 8 avisos. Cada aviso quedó aceptado así en `.zap/rules.tsv`:
+
+| Regla | Decisión | Motivo |
+| --- | --- | --- |
+| 10015 Re-examine Cache-control | IGNORE | El HTML va con `no-cache` a propósito, para que cada despliegue llegue al instante; no contiene datos personales |
+| 10027 Suspicious Comments | IGNORE | El aviso sale de un comentario dentro de React, ya minificado; no es código ni información de AceCam |
+| 10049 Storable and Cacheable Content | IGNORE | Son los archivos con hash (`/assets/…`), fuentes, `robots.txt` y `sitemap.xml`: públicos y pensados para la caché |
+| 10055 CSP: style-src unsafe-inline | WARN | Lo necesitan los estilos en línea de React y de las gráficas. Los scripts siguen sin `unsafe-inline`, que es lo que protege de XSS. Se mantiene visible como aviso |
+| 10094 Base64 Disclosure | IGNORE | Son el hash de la CSP y datos de librerías (Firebase); no hay secretos en el HTML ni en el JS |
+| 10109 Modern Web Application | IGNORE | Informativo: solo dice que es una aplicación de una sola página |
+| 90004 Cross-Origin-Embedder-Policy | WARN | Exigir COEP rompería la carga de videos desde Azure Blob y de los servicios de Firebase. La web ya envía COOP `same-origin`. Se mantiene como aviso |
+| 90005 Sec-Fetch-Dest Header | IGNORE | Es una cabecera que envía el navegador, no el servidor: el aviso no aplica a una respuesta |
 
 **Base NVD.** La acción de `owasp-dependency-check` usa una imagen que ya trae la base
 NVD actualizada y corre con `--noupdate`: no necesita caché ni `NVD_API_KEY`. Escanea el
