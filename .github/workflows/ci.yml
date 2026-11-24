@@ -314,25 +314,18 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Caché de la base NVD
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ~/.m2/repository/org/owasp/dependency-check-data
-          key: owasp-dependency-check-nvd-${{ github.run_id }}
-          restore-keys: owasp-dependency-check-nvd-
+      # La acción pasa cada entrada como UN solo argumento: "path" debe ser una sola ruta
+      # (una lista con saltos de línea llega como un nombre de archivo inexistente) y
+      # "others" admite una sola opción. No acepta "args". Su imagen ya trae la base
+      # NVD y corre con --noupdate, así que no hace falta caché ni NVD_API_KEY.
+      # --enableExperimental activa el analizador de requirements.txt (Python).
       - name: OWASP Dependency-Check
         uses: dependency-check/Dependency-Check_Action@75ba02d6183445fe0761d26e836bde58b1560600 # v1.1.0
         with:
           project: AceCam
-          path: |
-            model/requirements.txt
-            model/requirements-worker.txt
-            web/package-lock.json
+          path: .
           format: SARIF
-          args: >
-            --failOnCVSS 9
-            --enableRetired
-            ${{ secrets.NVD_API_KEY && format('--nvdApiKey {0}', secrets.NVD_API_KEY) || '' }}
+          others: --enableExperimental
       - name: Subir a Code scanning
         if: always()
         uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
