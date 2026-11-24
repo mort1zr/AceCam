@@ -130,7 +130,7 @@ Lo que falta se anota como **hallazgo** (H1, H2…) al final, con tarea y respon
 | H6 | Contraseña mínima de 6 caracteres y sin comprobar filtradas | Medio | Nueva tarea (cambia `auth.js`: coordinar con Fabián) | Axel |
 | H7 | Sin recuperación de contraseña | Medio | Nueva tarea | Fabián o Axel |
 | H8 | Sin segundo factor en administración de plataforma | Medio | Nueva tarea (requiere Identity Platform) | mort1zr |
-| H9 | `tracknet.pt` sin sha256 | Medio | Pendiente de `devsecops.md` §6 | Aaron |
+| H9 | `tracknet.pt` sin sha256 | Medio | Pendiente de `devsecops.md` §7 | Aaron |
 | H10 | Falsos positivos de gitleaks sin marcar | Bajo | Decisión del dueño del pipeline | mort1zr |
 | H11 | Sin alertas de errores, del worker ni de gasto | Medio | PCIT-218 y PCIT-228 | Axel |
 | H12 | SSRF al mover la importación de YouTube a Azure | Medio | PCIT-243 | Fabián |
