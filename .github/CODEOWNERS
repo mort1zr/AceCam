@@ -18,6 +18,11 @@
 /.pre-commit-config.yaml          @mort1zr
 /model/scripts/download_models.py @mort1zr
 
+# Pruebas y excepciones de seguridad (PCIT-218): nadie las debilita sin revisión
+/web/tests/rules/                 @mort1zr
+/web/tests/azure/                 @mort1zr
+/.zap/                            @mort1zr
+
 # Política de seguridad
 /SECURITY.md                      @mort1zr
 /docs/devsecops.md                @mort1zr

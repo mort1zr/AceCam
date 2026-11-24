@@ -18,6 +18,8 @@ En Azure (PCIT-226), los videos están en Azure Blob Storage:
     AZURE_CLIENT_ID                  identidad administrada que lee y escribe los videos
     FIREBASE_SERVICE_ACCOUNT         JSON de la cuenta de servicio (secreto de Azure, en lugar del archivo)
     ACECAM_VERSION                   commit de la imagen, para workerVersion
+    ACECAM_MAX_DURATION_SECONDS      tope de duración del video; manda sobre config.yaml
+                                     (0 lo desactiva). En Azure va en la tarea (PCIT-228)
 
 Con los emuladores de Firebase (sin credenciales):
 
@@ -51,13 +53,32 @@ from .video import encode_browser_video
 DEFAULT_PROJECT_ID = "acecam-e93a2"
 
 
+def max_duration_seconds(base: dict) -> float:
+    """Tope de duración: ACECAM_MAX_DURATION_SECONDS si está definida, si no config.yaml.
+
+    En Azure el worker corre en CPU y la tarea se corta a la hora (PCIT-228): un video
+    más largo que el tope gastaría crédito y terminaría igual en error. Por eso la tarea
+    fija su propio tope, aunque config.yaml no lo tenga.
+    """
+    raw = os.environ.get("ACECAM_MAX_DURATION_SECONDS", "").strip()
+    if not raw:
+        return base["worker"]["max_duration_seconds"]
+    try:
+        value = float(raw)
+    except ValueError:
+        raise SystemExit(f"ACECAM_MAX_DURATION_SECONDS no es un número: {raw!r}") from None
+    if value < 0:
+        raise SystemExit("ACECAM_MAX_DURATION_SECONDS no puede ser negativo.")
+    return value
+
+
 def make_analyzer(config_path=None, device=None, render_video=True):
     """Función vídeo → estadísticas del modelo, con la configuración de config.yaml."""
     import main as pipeline  # se importa aquí: carga trackers y modelos solo si hay trabajo
     from utils import get_video_info
 
     base = load_config(config_path)
-    max_seconds = base["worker"]["max_duration_seconds"]
+    max_seconds = max_duration_seconds(base)
     min_short_side = base["worker"].get("min_resolution")
     min_long_side = round(min_short_side * 16 / 9) if min_short_side else 0
     min_fps = base["worker"]["min_fps"]
