@@ -27,10 +27,23 @@ seguridad, SAST y OWASP corren siempre, sin importar la ruta.
 | `vigilancia-produccion` | Cada lunes (y a mano con `probar_vigilancia`) | Cabeceras de seguridad y ZAP Baseline sobre producción, aunque nadie suba código (PCIT-218) | Si algo falla, abre un issue con la etiqueta `vigilancia-seguridad` (o comenta en el abierto) |
 | `codeql` | Siempre | SAST de JavaScript, Python y los workflows | Los hallazgos aparecen en la PR |
 | `scorecard` | push a main y cada lunes | OpenSSF Scorecard: puntúa las prácticas del repo | No; informa |
-| `deploy` | Tras pasar `web-tests`/`web-reglas` | Firebase Hosting: vista previa (PR) o producción y reglas (main). Después comprueba la versión publicada y las cabeceras de seguridad (PCIT-215) | Despliega solo si la CI pasa; falla si una cabecera falta o se debilita |
+| `seguridad` | Siempre | **Puerta de seguridad (PCIT-213):** espera a `lint-workflow`, `secretos`, `dependencias-python`, `dependencias-web`, `revision-dependencias` y `codeql`. Pasa si todos salen bien u omitidos | **Sí**: si falla, no se despliega nada (Firebase ni Azure) |
+| `deploy` | Tras pasar `web-tests`, `web-reglas` y `seguridad` | Firebase Hosting: vista previa (PR) o producción y reglas (main). Después comprueba la versión publicada y las cabeceras de seguridad (PCIT-215) | Despliega solo si la CI pasa; falla si una cabecera falta o se debilita |
 | `imagen` / `desplegar` | PR y push que tocan `web/server/azure-videos/` o `model/` | Construye y (en main) despliega la API de videos en Azure Container Apps | Despliega solo si la imagen pasa |
 | `imagen-worker` / `desplegar-worker` | Igual que `imagen`/`desplegar` | Construye y (en main) despliega el worker del modelo como tarea programada en Azure | Igual |
 | Dependabot | Cada lunes | PRs para actualizar pip, npm y Actions | Pasan por el mismo pipeline |
+
+**Etapas en cadena (PCIT-213).** El orden es: controles de seguridad y pruebas en paralelo →
+`seguridad` (la puerta) → `deploy` y los despliegues de Azure → ZAP sobre lo publicado. La
+página del run muestra ese grafo. Si falla una etapa, las siguientes no corren. Las
+imágenes de Azure se construyen en paralelo para ganar tiempo, pero solo se publican si la
+puerta pasa.
+
+**Ojo con gitleaks al lanzar a mano:** en un push solo revisa los commits nuevos, pero con
+**Run workflow** (y cada lunes) revisa todo el historial. Mientras los 2 falsos positivos de
+`model/scripts/download_models.py` no estén marcados en `.gitleaksignore` (decisión del
+dueño del pipeline), `secretos` falla en esos casos y la puerta **no deja desplegar con Run
+workflow**. Un push a `main` sí despliega.
 
 **Volver a desplegar sin un push:** Actions → Pipeline → **Run workflow** sobre `main`
 ejecuta todo, incluidos los despliegues de Firebase y Azure (sirve tras arreglar una

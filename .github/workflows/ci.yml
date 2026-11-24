@@ -541,13 +541,39 @@ jobs:
         with:
           sarif_file: results.sarif
 
+  # ---------------------------------------------------------  PUERTA DE SEGURIDAD
+  # PCIT-213: ningún despliegue (Firebase ni Azure) sale si falla un control de seguridad.
+  # Espera a secretos, dependencias, CodeQL y actionlint; "skipped" cuenta como superado
+  # (por ejemplo, Dependency Review fuera de una PR). Las imágenes de Azure se construyen en
+  # paralelo, pero solo se despliegan si esta puerta pasa.
+  seguridad:
+    name: "Puerta de seguridad"
+    needs: [lint-workflow, secretos, dependencias-python, dependencias-web, revision-dependencias, codeql]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - name: Comprobar los controles
+        env:
+          RESULTADOS: ${{ toJSON(needs) }}
+        run: |
+          echo "$RESULTADOS" | jq -r 'to_entries[] | "\(.key): \(.value.result)"'
+          fallos=$(echo "$RESULTADOS" | jq -r '[to_entries[] | select(.value.result != "success" and .value.result != "skipped") | .key] | join(", ")')
+          if [ -n "$fallos" ]; then
+            echo "::error::No se despliega: fallaron o se cancelaron estos controles de seguridad: $fallos"
+            exit 1
+          fi
+          echo "Todos los controles de seguridad pasaron."
+
   # ------------------------------------------------------------------------  DEPLOY
 
   deploy:
     name: "Deploy: Firebase Hosting"
-    needs: [web-tests, web-reglas]
+    needs: [web-tests, web-reglas, seguridad]
     if: |
       always() && needs.web-tests.result == 'success' && needs.web-reglas.result == 'success'
+      && needs.seguridad.result == 'success'
       && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -719,8 +745,8 @@ jobs:
 
   desplegar:
     name: "Azure: desplegar la API de videos"
-    needs: imagen
-    if: github.event_name != 'pull_request'
+    needs: [imagen, seguridad]
+    if: always() && github.event_name != 'pull_request' && needs.imagen.result == 'success' && needs.seguridad.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     environment: production
@@ -852,8 +878,8 @@ jobs:
 
   desplegar-worker:
     name: "Azure: desplegar el worker"
-    needs: imagen-worker
-    if: github.event_name != 'pull_request'
+    needs: [imagen-worker, seguridad]
+    if: always() && github.event_name != 'pull_request' && needs.imagen-worker.result == 'success' && needs.seguridad.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     environment: production
