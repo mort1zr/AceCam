@@ -3,6 +3,8 @@ import { act, cleanup, fireEvent, render, screen, within } from '@testing-librar
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { collection, doc, getDoc, getDocFromServer, onSnapshot, query, runTransaction, where } from 'firebase/firestore'
+// Vitest prepara el reporte real antes de las interacciones con la carga diferida.
+import '../components/analysis/MatchReport.jsx'
 import Partidos from './Partidos.jsx'
 import { CLAVE_UNIDADES, guardarUnidades } from '../lib/unidades.js'
 
@@ -154,14 +156,14 @@ it('abre el reporte con el contrato del worker y mantiene los filtros al volver'
   expect(screen.getByLabelText('Desde').value).toBe('2026-10-23')
   expect(document.activeElement).toBe(screen.getByRole('region', { name: 'Historial de partidos' }))
   await user.click(screen.getByRole('button', { name: /Ver reporte del partido con Rival con medición parcial/ }))
-  const partial = within(screen.getByRole('region', { name: 'Indicadores del jugador' }))
+  const partial = within(await screen.findByRole('region', { name: 'Indicadores del jugador' }))
   expect(partial.getAllByRole('article')).toHaveLength(2)
   expect(partial.getByText('42')).toBeTruthy()
   expect(partial.getByText('0')).toBeTruthy()
   expect(screen.queryByRole('region', { name: 'Peloteos del partido' })).toBeNull()
   await user.click(screen.getByRole('button', { name: 'Volver al listado' }))
   await user.click(screen.getByRole('button', { name: /Ver reporte del partido con Rival sin medición/ }))
-  expect(screen.getByText('Sin datos del desglose por set.')).toBeTruthy()
+  expect(await screen.findByText('Sin datos del desglose por set.')).toBeTruthy()
   const empty = within(screen.getByRole('region', { name: 'Indicadores del jugador' }))
   expect(empty.getByText('Sin datos de estadísticas.')).toBeTruthy()
   expect(empty.queryByRole('article')).toBeNull()

@@ -29,7 +29,7 @@ Ya no aparece el aviso de chunks de más de 500 kB.
 - `firebaseAuth.js` usa `initializeAuth` con las mismas tres persistencias que `getAuth`, pero sin el soporte de ventanas emergentes y redirecciones, que la app no usa.
 - `Partidos.jsx` carga `MatchReport` con `lazy()`. La lista ya no descarga Recharts: se descarga al abrir el primer reporte, y mientras tanto (unos 110 kB gzip) el área queda vacía.
 - `vite.config.js` separa `react`, `firebase-auth` y `recharts` en chunks propios, para que el navegador los mantenga en caché aunque cambie el código de la app.
-- `Partidos.test.jsx` espera el título del reporte con `findByRole`, porque ahora carga de forma diferida.
+- `Partidos.test.jsx` carga el módulo real del reporte antes de las interacciones y espera el contenido de cada reporte. Así la prueba puede comprobar el foco, las estadísticas y los filtros sin depender del tiempo que Vitest tarde en transformar el módulo.
 
 **Se dejó a propósito**
 
