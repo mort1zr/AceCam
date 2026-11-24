@@ -54,12 +54,27 @@ matriz de acceso (PCIT-210).
 | `orgs/{orgId}/applications/{appId}/video.{mp4,mov}` | Video de una postulación | **Sí** | **Sensible** | Nadie desde la web: las reglas lo cierran. El equipo de la organización lo ve a través del servidor, que comprueba la sesión y la organización (`Cache-Control: private, no-store`) | ⚠️ **Sin plazo.** Se conserva aunque se desactive el enlace |
 | Cualquier otra ruta | — | — | — | Nadie: todo lo demás está cerrado | — |
 
+### Azure Blob Storage (PCIT-222)
+
+Desde PCIT-225 la web sube y lee los videos de los partidos en Azure Blob cuando
+`VITE_VIDEO_API_URL` está configurada (producción). Cuenta `acecamvideosfba600`,
+contenedor privado `videos`, región **Chile Central**, cifrado en reposo de Azure.
+La web nunca recibe claves: la API de videos comprueba la sesión de Firebase y el rol
+y entrega un enlace SAS temporal (10 minutos para leer, 15 para subir).
+
+| Ruta | Contenido | ¿Menores? | Nivel | Quién lee | Conservación |
+| --- | --- | --- | --- | --- | --- |
+| `orgs/{orgId}/matches/{matchId}/video.{mp4,mov}` | Video original del partido | Puede haber | **Sensible** | Mismas condiciones que en Storage, aplicadas por la API de videos (`web/server/azure-videos/access.js`) | ⚠️ **Sin plazo** (PCIT-221). Borrado accidental recuperable 7 días (*soft delete*) |
+| `orgs/{orgId}/matches/{matchId}/processed.mp4` | Video anotado por el worker en Azure (PCIT-226) | Puede haber | **Sensible** | Igual que el original. Solo el worker escribe, con su identidad administrada | ⚠️ **Sin plazo** (PCIT-221) |
+| Registros de la API de videos (Log Analytics `acecam-logs`) | Método, ruta, estado y duración de cada petición; **sin** token, correo ni nombre | No | Interno | El equipo, desde el portal de Azure | 30 días (retención por defecto del espacio de trabajo) |
+
 ### Fuera de Firestore y Storage
 
 | Lugar | Datos | Conservación |
 | --- | --- | --- |
 | Firebase Authentication | Correo y contraseña (Google guarda la contraseña cifrada) | ⚠️ **Sin plazo.** La web no permite borrar la cuenta |
 | Archivos temporales del worker (`acecam-worker/match-…`) | Copia del video mientras se analiza | Se borran al terminar, con éxito o con error (`shutil.rmtree`) |
+| Contenedor del worker en Azure (tarea `acecam-worker`) | Copia del video mientras se analiza, y la cuenta de servicio de Firebase en un archivo temporal con permisos `0600` | Se borran al terminar; el contenedor de cada ejecución se descarta |
 | Archivos temporales del servidor de videos (`acecam-application-video-…`) | Video recibido de una postulación | Se borran al terminar la subida |
 | Hoja de Google de la organización (PCIT-197) | Respuestas del Google Form | Las gestiona la organización en su propia cuenta de Google |
 | Datos de ejemplo (`npm run seed`) | Personas ficticias | Solo en los emuladores |

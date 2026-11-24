@@ -6,7 +6,7 @@ const textos = {
   es: {
     titulo: 'Política de privacidad',
     borrador: 'Borrador en revisión',
-    actualizado: 'Última actualización: 5 de noviembre de 2026',
+    actualizado: 'Última actualización: 24 de noviembre de 2026',
     intro:
       'Aquí explicamos qué datos guarda AceCam, para qué los usamos, cuánto tiempo los conservamos y cómo puedes pedir que se corrijan o se borren. Seguimos la Ley N.° 29733, Ley de Protección de Datos Personales del Perú, y su reglamento.',
     indice: 'En esta página',
@@ -64,7 +64,8 @@ const textos = {
         id: 'terceros',
         titulo: 'Con quién los compartimos',
         contenido: [
-          'Usamos servicios de Google (Firebase) para guardar la información y los videos. Sus servidores pueden estar fuera del Perú, por lo que hay una transferencia internacional de datos con garantías de seguridad adecuadas.',
+          'Usamos servicios de Google (Firebase) para las cuentas, la información de jugadores, partidos y postulaciones, y la web. Los videos de los partidos se guardan y se analizan en Microsoft Azure, en su región de Chile. Los servidores de ambos están fuera del Perú, por lo que hay una transferencia internacional de datos con garantías de seguridad adecuadas.',
+          'En Azure los videos se guardan cifrados y en privado. Solo se accede a ellos con enlaces temporales que AceCam entrega a los miembros autorizados de la organización, y el análisis los procesa sin compartirlos con terceros.',
           'Si analizas un video de YouTube, AceCam lo procesa según los términos de YouTube. Fuera de estos casos, solo compartimos datos cuando una autoridad lo exige por ley.',
         ],
       },
@@ -102,7 +103,7 @@ const textos = {
   en: {
     titulo: 'Privacy policy',
     borrador: 'Draft under review',
-    actualizado: 'Last updated: November 5, 2026',
+    actualizado: 'Last updated: November 24, 2026',
     intro:
       'This page explains what data AceCam stores, what we use it for, how long we keep it and how you can ask us to correct or delete it. We follow Peru’s Personal Data Protection Law No. 29733 and its regulations.',
     indice: 'On this page',
@@ -160,7 +161,8 @@ const textos = {
         id: 'terceros',
         titulo: 'Who we share it with',
         contenido: [
-          'We use Google services (Firebase) to store information and videos. Their servers may be outside Peru, so data is transferred internationally with adequate security safeguards.',
+          'We use Google services (Firebase) for accounts, player, match and application information, and the website. Match videos are stored and analyzed on Microsoft Azure, in its Chile region. Both providers’ servers are outside Peru, so data is transferred internationally with adequate security safeguards.',
+          'On Azure, videos are stored encrypted and private. They are only accessed through temporary links that AceCam gives to authorized members of the organization, and the analysis processes them without sharing them with third parties.',
           'If you analyze a YouTube video, AceCam processes it under YouTube’s terms. Beyond this, we only share data when an authority requires it by law.',
         ],
       },
