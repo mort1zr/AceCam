@@ -202,7 +202,7 @@ sin hallazgos, 0 FAIL y 8 avisos. Cada aviso quedó aceptado así en `.zap/rules
 | 10027 Suspicious Comments | IGNORE | El aviso sale de un comentario dentro de React, ya minificado; no es código ni información de AceCam |
 | 10049 Storable and Cacheable Content | IGNORE | Son los archivos con hash (`/assets/…`), fuentes, `robots.txt` y `sitemap.xml`: públicos y pensados para la caché |
 | 10055 CSP: style-src unsafe-inline | WARN | Lo necesitan los estilos en línea de React y de las gráficas. Los scripts siguen sin `unsafe-inline`, que es lo que protege de XSS. Se mantiene visible como aviso |
-| 10094 Base64 Disclosure | IGNORE | Son el hash de la CSP y datos de librerías (Firebase); no hay secretos en el HTML ni en el JS |
+| 10094 Base64 Disclosure | IGNORE | En el HTML es el commit publicado (`<meta name="acecam-version">`, PCIT-198), que es público; en el JS son datos de las librerías (Firebase). gitleaks revisa que no haya secretos en el código |
 | 10109 Modern Web Application | IGNORE | Informativo: solo dice que es una aplicación de una sola página |
 | 90004 Cross-Origin-Embedder-Policy | WARN | Exigir COEP rompería la carga de videos desde Azure Blob y de los servicios de Firebase. La web ya envía COOP `same-origin`. Se mantiene como aviso |
 | 90005 Sec-Fetch-Dest Header | IGNORE | Es una cabecera que envía el navegador, no el servidor: el aviso no aplica a una respuesta |
