@@ -9,6 +9,7 @@ Ley N.° 29733 de Protección de Datos Personales del Perú y su reglamento.
 | 2 | [Matriz de acceso por rol y organización](#2-matriz-de-acceso-por-rol-y-organización) | PCIT-210, PCIT-211 |
 | 3 | [Cobertura de las reglas](#3-cobertura-de-las-reglas) | PCIT-212 |
 | 4 | [Revisión de reglas y hallazgos](#4-revisión-de-reglas-y-hallazgos) | PCIT-217 |
+| 5 | [OWASP Top 10 y ASVS nivel 1](PCIT-216-owasp.md) (documento aparte) | PCIT-216 |
 
 Fuentes revisadas: `firebase/firestore.rules`, `firebase/storage.rules`,
 [`docs/firestore-schema.md`](firestore-schema.md), el servidor de videos
