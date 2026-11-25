@@ -7,8 +7,7 @@ import { Transform } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 import { FieldValue } from 'firebase-admin/firestore'
 import { APPLICATION_VIDEO_CONSENT_VERSION } from '../../src/panel/lib/schema.js'
-import { MAX_VIDEO_FPS, MIN_VIDEO_FPS, videoRequirementsError } from '../../src/panel/lib/videoRequirements.js'
-import { MAX_VIDEO_BYTES } from '../../src/panel/lib/videoUpload.js'
+import { MAX_VIDEO_BYTES, MAX_VIDEO_FPS, MIN_VIDEO_FPS, videoRequirementsError } from '../../src/panel/lib/videoRequirements.js'
 
 const route = /^\/api\/application-video\/([A-Za-z0-9_-]{1,128})\/([A-Za-z0-9]{20})\/([A-Za-z0-9]{20})$/
 const unavailable = 'La postulación o el enlace ya no está disponible.'
@@ -21,7 +20,61 @@ class UploadError extends Error {
   }
 }
 
-export function createApplicationVideoStore({ db, bucket }) {
+/** Archivos en Firebase Storage (demo local, PCIT-182). Escribe una sola vez: no sobrescribe. */
+export function firebaseStorageObjects(bucket) {
+  return {
+    async write({ path, localPath, contentType, sha256, signal }) {
+      const object = bucket.file(path)
+      try {
+        await pipeline(createReadStream(localPath), object.createWriteStream({
+          resumable: false, validation: 'crc32c', preconditionOpts: { ifGenerationMatch: 0 },
+          metadata: { contentType, cacheControl: 'private, no-store', metadata: { sha256 } },
+        }), { signal })
+      } catch (error) {
+        if (Number(error.code) !== 412) throw error
+        const [existing] = await object.getMetadata()
+        if (existing.metadata?.sha256 !== sha256) throw error
+      }
+    },
+    async open(path) {
+      const object = bucket.file(path)
+      const [metadata] = await object.getMetadata()
+      return { stream: object.createReadStream(), size: Number(metadata.size) }
+    },
+  }
+}
+
+/**
+ * Archivos en Azure Blob (PCIT-251), en el mismo contenedor privado que los videos de partidos.
+ * Escribe una sola vez (If-None-Match: *); un reintento con el mismo archivo (mismo sha256) vale.
+ */
+export function azureBlobObjects(container) {
+  return {
+    async write({ path, localPath, contentType, sha256, signal }) {
+      const blob = container.getBlockBlobClient(path)
+      try {
+        await blob.uploadFile(localPath, {
+          abortSignal: signal,
+          conditions: { ifNoneMatch: '*' },
+          blobHTTPHeaders: { blobContentType: contentType, blobCacheControl: 'private, no-store' },
+          metadata: { sha256 },
+        })
+      } catch (error) {
+        if (![409, 412].includes(error.statusCode)) throw error
+        const existing = await blob.getProperties()
+        if (existing.metadata?.sha256 !== sha256) throw error
+      }
+    },
+    async open(path) {
+      const blob = container.getBlobClient(path)
+      const download = await blob.download()
+      return { stream: download.readableStreamBody, size: Number(download.contentLength) }
+    },
+  }
+}
+
+/** Con `bucket`, Firebase Storage (demo); con `objects`, el almacenamiento que se indique (Azure). */
+export function createApplicationVideoStore({ db, bucket, objects = firebaseStorageObjects(bucket) }) {
   function references({ orgId, formId, applicationId }) {
     return [db.collection('applications').doc(applicationId),
       db.doc(`orgs/${orgId}/applicationForms/${formId}`)]
@@ -47,10 +100,8 @@ export function createApplicationVideoStore({ db, bucket }) {
     const path = application?.videoPaths?.[0]
     if (application?.orgId !== orgId || application.formId !== formId ||
         (path !== prefix + 'mp4' && path !== prefix + 'mov')) throw new UploadError(404, unavailable)
-    const object = bucket.file(path)
-    const [metadata] = await object.getMetadata()
-    return { stream: object.createReadStream(), size: metadata.size,
-      contentType: path.endsWith('.mov') ? 'video/quicktime' : 'video/mp4' }
+    const { stream, size } = await objects.open(path)
+    return { stream, size, contentType: path.endsWith('.mov') ? 'video/quicktime' : 'video/mp4' }
   }
 
   async function attach(identity, { metadata, localPath, sha256, signal }) {
@@ -69,17 +120,7 @@ export function createApplicationVideoStore({ db, bucket }) {
     })
     if (!reserved) return
 
-    const object = bucket.file(path)
-    try {
-      await pipeline(createReadStream(localPath), object.createWriteStream({
-        resumable: false, validation: 'crc32c', preconditionOpts: { ifGenerationMatch: 0 },
-        metadata: { contentType: metadata.contentType, cacheControl: 'private, no-store', metadata: { sha256 } },
-      }), { signal })
-    } catch (error) {
-      if (Number(error.code) !== 412) throw error
-      const [existing] = await object.getMetadata()
-      if (existing.metadata?.sha256 !== sha256) throw error
-    }
+    await objects.write({ path, localPath, contentType: metadata.contentType, sha256, signal })
 
     // A retry can finish a reserved upload if the first request lost its connection.
     await db.runTransaction(async transaction => {
@@ -96,21 +137,36 @@ export function createApplicationVideoStore({ db, bucket }) {
   return { alreadyAttached, attach, read }
 }
 
-export function createApplicationVideoMiddleware({ store, probe, authorize, origin }) {
+/**
+ * @param {object} options
+ * @param {string} options.origin       Origen exacto de la web que puede usar el servicio
+ * @param {string} [options.serviceHost] Host del propio servicio (por defecto, el del origen: demo local)
+ * @param {boolean} [options.cors]      true cuando el servicio está en otro dominio que la web (Azure, PCIT-251)
+ */
+export function createApplicationVideoMiddleware({ store, probe, authorize, origin, serviceHost = new URL(origin).host, cors = false }) {
   let uploading = false
-  const host = new URL(origin).host
+  const corsHeaders = cors ? { 'Access-Control-Allow-Origin': origin, Vary: 'Origin' } : {}
   return async (request, response, next) => {
     const match = route.exec(request.url ?? '')
     if (!match) return next()
     function reply(status, error) {
       if (!response.destroyed) response.writeHead(status, {
         'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store',
-        'X-Content-Type-Options': 'nosniff',
+        'X-Content-Type-Options': 'nosniff', ...corsHeaders,
       }).end(JSON.stringify(error ? { error } : { attached: true }))
       request.resume()
     }
 
-    if (request.headers.host !== host || (request.headers.origin && request.headers.origin !== origin)) return reply(403, unavailable)
+    if (request.headers.host !== serviceHost || (request.headers.origin && request.headers.origin !== origin)) return reply(403, unavailable)
+    // Preflight de CORS: el navegador pregunta antes de enviar el archivo o el token.
+    if (cors && request.method === 'OPTIONS') {
+      if (request.headers.origin !== origin) return reply(403, unavailable)
+      response.writeHead(204, {
+        ...corsHeaders, 'Access-Control-Allow-Methods': 'GET, POST',
+        'Access-Control-Allow-Headers': 'Authorization, Content-Type', 'Access-Control-Max-Age': '600',
+      }).end()
+      return
+    }
     const [, orgId, formId, applicationId] = match
     const identity = { orgId, formId, applicationId }
     if (request.method === 'GET') {
@@ -121,7 +177,7 @@ export function createApplicationVideoMiddleware({ store, probe, authorize, orig
       try {
         const video = await store.read(identity)
         response.writeHead(200, { 'Content-Type': video.contentType, 'Content-Length': video.size,
-          'Cache-Control': 'private, no-store', 'X-Content-Type-Options': 'nosniff' })
+          'Cache-Control': 'private, no-store', 'X-Content-Type-Options': 'nosniff', ...corsHeaders })
         await pipeline(video.stream, response)
       } catch (error) {
         if (!response.headersSent) reply(error instanceof UploadError ? error.status : 503, unavailable)

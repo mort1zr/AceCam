@@ -1,0 +1,13 @@
+{
+  "name": "acecam-application-video",
+  "private": true,
+  "description": "Servicio de videos de postulación de AceCam en Azure (PCIT-251)",
+  "type": "module",
+  "engines": { "node": ">=22" },
+  "scripts": { "start": "node server/application-video/server.js" },
+  "dependencies": {
+    "@azure/identity": "4.14.1",
+    "@azure/storage-blob": "12.34.0",
+    "firebase-admin": "14.5.0"
+  }
+}

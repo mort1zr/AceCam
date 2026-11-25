@@ -59,6 +59,9 @@ env:
   APP_NAME: acecam-videos-api
   WORKER_IMAGE: ghcr.io/mort1zr/acecam-worker
   WORKER_JOB: acecam-worker
+  # PCIT-251: servicio de videos de postulación (formulario público → Azure Blob privado).
+  APPLICATIONS_IMAGE: ghcr.io/mort1zr/acecam-application-video
+  APPLICATIONS_APP: acecam-application-video
   # PCIT-228: tope de duración del video en Azure. En CPU (2 vCPU) el modelo tarda unos
   # 30 min por minuto de video (PCIT-223) y la tarea se corta a la hora: 90 s dejan margen
   # para descargar, cargar el modelo y subir el resultado. Un video más largo termina en
@@ -104,6 +107,8 @@ jobs:
               - '.github/workflows/ci.yml'
             azure:
               - 'web/server/azure-videos/**'
+              - 'web/server/application-video/**'
+              - 'web/server/video-import/**'
               - 'model/**'
               - '.github/workflows/ci.yml'
 
@@ -622,6 +627,8 @@ jobs:
           VITE_VIDEO_API_URL: ${{ vars.VITE_VIDEO_API_URL }}
           # PCIT-219: clave de sitio de reCAPTCHA v3 para App Check (pública). Vacía, App Check no se activa.
           VITE_FIREBASE_APPCHECK_SITE_KEY: ${{ vars.VITE_FIREBASE_APPCHECK_SITE_KEY }}
+          # PCIT-251: servicio de videos de postulación en Azure. Vacía, el formulario no ofrece adjuntar video.
+          VITE_APPLICATION_VIDEO_API_URL: ${{ vars.VITE_APPLICATION_VIDEO_API_URL }}
           # PCIT-198: el commit queda en <meta name="acecam-version"> del HTML publicado.
           ACECAM_VERSION: ${{ github.sha }}
         run: |
@@ -833,6 +840,148 @@ jobs:
             echo "| Paso | Resultado |"
             echo "| --- | --- |"
             echo "| Imagen | \`$IMAGE:${GITHUB_SHA:0:12}\` |"
+            echo "| Despliegue | $OUTCOME |"
+            echo "| URL | ${URL:-sin URL} |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # ---------- Videos de postulación (PCIT-251) ----------
+  imagen-postulaciones:
+    name: "Azure: construir imagen de videos de postulación"
+    needs: cambios
+    if: needs.cambios.outputs.azure == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      packages: write # publicar la imagen en GitHub Packages (solo en main)
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # El contexto es web/: la imagen copia la validación compartida con la web.
+      - name: Construir la imagen
+        working-directory: web
+        run: |
+          docker build --pull -f server/application-video/Dockerfile -t "$APPLICATIONS_IMAGE:$GITHUB_SHA" \
+            --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" \
+            --label "org.opencontainers.image.description=Videos de postulación de AceCam (PCIT-251)" .
+
+      # Sin configuración debe negarse a arrancar, y ffprobe tiene que estar disponible.
+      - name: Comprobar la imagen
+        run: |
+          if docker run --rm "$APPLICATIONS_IMAGE:$GITHUB_SHA" > arranque.log 2>&1; then
+            echo "::error::El servicio arrancó sin configuración."; exit 1
+          fi
+          grep -q "Falta la variable de entorno" arranque.log || { cat arranque.log; exit 1; }
+          docker run --rm --entrypoint /usr/bin/ffprobe "$APPLICATIONS_IMAGE:$GITHUB_SHA" -version | head -1
+
+      - name: Publicar en GitHub Packages
+        if: github.event_name != 'pull_request'
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ACTOR: ${{ github.actor }}
+        run: |
+          echo "$TOKEN" | docker login ghcr.io -u "$ACTOR" --password-stdin
+          docker push "$APPLICATIONS_IMAGE:$GITHUB_SHA"
+          docker logout ghcr.io
+
+  desplegar-postulaciones:
+    name: "Azure: desplegar videos de postulación"
+    needs: [imagen-postulaciones, seguridad]
+    if: always() && github.event_name != 'pull_request' && needs.imagen-postulaciones.result == 'success' && needs.seguridad.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: production
+    permissions:
+      contents: read
+      id-token: write # inicio de sesión en Azure sin contraseña (OIDC)
+    steps:
+      # Reutiliza la identidad de Blob de la API y la cuenta de servicio del worker, que ya
+      # puede actualizar Firestore: en Firestore los permisos son de todo el proyecto, así que
+      # una cuenta aparte tendría el mismo rol (ver docs/PCIT-251-postulaciones-en-azure.md).
+      - name: Comprobar configuración
+        id: config
+        env:
+          CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          IDENTITY: ${{ vars.AZURE_VIDEOS_API_IDENTITY_ID }}
+          FIREBASE_SA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_WORKER }}
+        run: |
+          if [ -z "$CLIENT_ID" ] || [ -z "$IDENTITY" ] || [ -z "$FIREBASE_SA" ]; then
+            echo "::warning::Faltan variables AZURE_* o el secreto FIREBASE_SERVICE_ACCOUNT_WORKER: no se despliega el servicio de postulaciones."
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Iniciar sesión en Azure
+        if: steps.config.outputs.ok == 'true'
+        uses: azure/login@7184910d9eb2b1c5e48f7073824a90609bb9b6d6 # v2.3.1
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Desplegar en Azure Container Apps
+        id: deploy
+        if: steps.config.outputs.ok == 'true'
+        env:
+          RG: ${{ vars.AZURE_RESOURCE_GROUP }}
+          ENVIRONMENT: ${{ vars.AZURE_CONTAINERAPPS_ENV }}
+          STORAGE: ${{ vars.AZURE_STORAGE_ACCOUNT }}
+          IDENTITY: ${{ vars.AZURE_VIDEOS_API_IDENTITY_ID }}
+          IDENTITY_CLIENT_ID: ${{ vars.AZURE_VIDEOS_API_IDENTITY_CLIENT_ID }}
+          FIREBASE_SA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_WORKER }}
+        run: |
+          az extension add --name containerapp --upgrade --only-show-errors
+          DOMAIN=$(az containerapp env show -n "$ENVIRONMENT" -g "$RG" --query properties.defaultDomain -o tsv)
+          ENV_VARS=(
+            "AZURE_STORAGE_ACCOUNT=$STORAGE" "AZURE_STORAGE_CONTAINER=videos" "AZURE_CLIENT_ID=$IDENTITY_CLIENT_ID"
+            "FIREBASE_PROJECT_ID=acecam-e93a2" "ALLOWED_ORIGIN=https://acecam-e93a2.web.app"
+            "SERVICE_HOST=$APPLICATIONS_APP.$DOMAIN" "FIREBASE_SERVICE_ACCOUNT=secretref:firebase-sa"
+          )
+          if az containerapp show -n "$APPLICATIONS_APP" -g "$RG" -o none 2>/dev/null; then
+            az containerapp secret set -n "$APPLICATIONS_APP" -g "$RG" --secrets "firebase-sa=$FIREBASE_SA" -o none
+            az containerapp update -n "$APPLICATIONS_APP" -g "$RG" --image "$APPLICATIONS_IMAGE:$GITHUB_SHA" --set-env-vars "${ENV_VARS[@]}" -o none
+          else
+            # 0,5 vCPU y 1 GiB: el video se guarda en disco temporal mientras ffprobe lo revisa.
+            az containerapp create -n "$APPLICATIONS_APP" -g "$RG" --environment "$ENVIRONMENT" \
+              --image "$APPLICATIONS_IMAGE:$GITHUB_SHA" --ingress external --target-port 8080 \
+              --min-replicas 0 --max-replicas 1 --cpu 0.5 --memory 1Gi \
+              --user-assigned "$IDENTITY" --secrets "firebase-sa=$FIREBASE_SA" \
+              --env-vars "${ENV_VARS[@]}" --tags proyecto=acecam -o none
+          fi
+          echo "url=https://$APPLICATIONS_APP.$DOMAIN" >> "$GITHUB_OUTPUT"
+
+      - name: Comprobar el servicio publicado
+        if: steps.config.outputs.ok == 'true'
+        env:
+          URL: ${{ steps.deploy.outputs.url }}
+        run: |
+          for _ in 1 2 3 4 5 6 7 8 9 10; do
+            if [ "$(curl -s --max-time 15 "$URL/healthz")" = "ok" ]; then
+              # Un envío desde otro origen se rechaza sin tocar nada.
+              status=$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'Origin: https://otro-sitio.test' \
+                "$URL/api/application-video/org/AAAAAAAAAAAAAAAAAAAA/BBBBBBBBBBBBBBBBBBBB")
+              [ "$status" = "403" ] || { echo "::error::Otro origen debería recibir 403 y recibió $status."; exit 1; }
+              echo "Servicio de postulaciones en línea: $URL"; exit 0
+            fi
+            sleep 15
+          done
+          echo "::error::El servicio no respondió en $URL/healthz."; exit 1
+
+      - name: Resumen del despliegue
+        if: always() && steps.config.outputs.ok == 'true'
+        env:
+          URL: ${{ steps.deploy.outputs.url }}
+          OUTCOME: ${{ steps.deploy.outcome }}
+        run: |
+          {
+            echo "### Videos de postulación (Azure)"
+            echo ""
+            echo "| Paso | Resultado |"
+            echo "| --- | --- |"
+            echo "| Imagen | \`$APPLICATIONS_IMAGE:${GITHUB_SHA:0:12}\` |"
             echo "| Despliegue | $OUTCOME |"
             echo "| URL | ${URL:-sin URL} |"
           } >> "$GITHUB_STEP_SUMMARY"

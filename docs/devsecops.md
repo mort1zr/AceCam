@@ -242,6 +242,7 @@ costos en [PCIT-222 · Videos en Azure](PCIT-222-videos-en-azure.md).
 | Cuenta de almacenamiento | `acecamvideosfba600`, contenedor privado `videos` | Videos originales y procesados. *Soft delete* de 7 días |
 | Entorno de Container Apps | `acecam-env` | Donde corren la API y el worker |
 | Container App | `acecam-videos-api` | API que entrega enlaces temporales (SAS) para subir y ver videos |
+| Container App | `acecam-application-video` | Recibe y valida los videos del formulario público de postulación y los guarda privados en Blob (PCIT-251, ver [su documento](PCIT-251-postulaciones-en-azure.md)) |
 | Container Apps Job | `acecam-worker` | El modelo: cada 5 min procesa un partido en cola. 2 vCPU, 4 GiB, máximo 1 h, videos de hasta 90 s (`WORKER_MAX_SECONDS` en `ci.yml`) |
 | Identidad administrada | `acecam-github` | GitHub Actions entra en Azure con ella (OIDC, sin contraseña). Contributor sobre `acecam-rg` |
 | Identidad administrada | `acecam-videos-api` | La usan la API y el worker para leer y escribir videos. Storage Blob Data Contributor solo sobre la cuenta de almacenamiento |
@@ -256,6 +257,7 @@ costos en [PCIT-222 · Videos en Azure](PCIT-222-videos-en-azure.md).
 | `AZURE_RESOURCE_GROUP`, `AZURE_STORAGE_ACCOUNT`, `AZURE_CONTAINERAPPS_ENV` | Variable | `acecam-rg`, `acecamvideosfba600`, `acecam-env` |
 | `AZURE_VIDEOS_API_IDENTITY_ID`, `AZURE_VIDEOS_API_IDENTITY_CLIENT_ID` | Variable | ID de recurso y client ID de `acecam-videos-api` |
 | `VITE_VIDEO_API_URL` | Variable | URL de la API de videos. Vacía, la web vuelve a Firebase Storage |
+| `VITE_APPLICATION_VIDEO_API_URL` | Variable | URL del servicio de videos de postulación (PCIT-251). Vacía, el formulario no ofrece adjuntar video |
 | `FIREBASE_SERVICE_ACCOUNT_AZURE` | Secreto | Cuenta de servicio de Firebase de **solo lectura** para la API |
 | `FIREBASE_SERVICE_ACCOUNT_WORKER` | Secreto | Cuenta de servicio de Firebase con escritura en Firestore para el worker |
 
