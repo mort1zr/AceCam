@@ -9,7 +9,9 @@
 import { ref, uploadBytesResumable } from 'firebase/storage'
 
 /** Límite de las reglas de Storage. Si cambia, cambiar también storage.rules. */
-export const MAX_VIDEO_BYTES = 500 * 1024 * 1024
+import { MAX_VIDEO_BYTES } from './videoRequirements.js'
+
+export { MAX_VIDEO_BYTES }
 
 export const VIDEO_CONTENT_TYPES = Object.freeze({ mp4: 'video/mp4', mov: 'video/quicktime' })
 

@@ -191,4 +191,32 @@ describe('Formulario público de postulación', () => {
       '/api/application-video/org-demo/AcecamFormDemoABC123/ApplicationDemo12345',
     ))
   })
+
+  it('en producción envía el video al servicio de postulaciones de Azure (PCIT-251)', async () => {
+    const user = userEvent.setup()
+    vi.stubEnv('MODE', 'production')
+    vi.stubEnv('VITE_APPLICATION_VIDEO_API_URL', 'https://postulaciones.azure.test/')
+    getDocFromServer.mockResolvedValueOnce({ exists: () => true })
+    addDoc.mockResolvedValueOnce({ id: 'ApplicationDemo12345' })
+    const fetchVideo = vi.fn().mockResolvedValueOnce(new Response('{"attached":true}', { status: 200 }))
+    vi.stubGlobal('fetch', fetchVideo)
+    renderForm()
+    await fill(user, '2000-02-15')
+    await user.upload(screen.getByLabelText('Video (opcional)'), new File(['demo'], 'clip.mp4', { type: 'video/mp4' }))
+    await user.click(screen.getByRole('checkbox'))
+    await user.click(screen.getByRole('button', { name: 'Enviar postulación' }))
+    expect(await screen.findByText(/Recibimos tu postulación/)).toBeTruthy()
+    const [url, init] = fetchVideo.mock.calls[0]
+    expect(url).toBe('https://postulaciones.azure.test/api/application-video/org-demo/AcecamFormDemoABC123/ApplicationDemo12345')
+    expect(init).toMatchObject({ method: 'POST', headers: { 'Content-Type': 'application/octet-stream' } })
+  })
+
+  it('en producción, sin el servicio configurado, no ofrece adjuntar video', async () => {
+    vi.stubEnv('MODE', 'production')
+    vi.stubEnv('VITE_APPLICATION_VIDEO_API_URL', '')
+    getDocFromServer.mockResolvedValueOnce({ exists: () => true })
+    renderForm()
+    await screen.findByRole('button', { name: 'Enviar postulación' })
+    expect(screen.queryByLabelText('Video (opcional)')).toBeNull()
+  })
 })
