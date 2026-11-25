@@ -1,13 +1,11 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { flushSync } from 'react-dom'
 import { Link } from 'react-router'
 import { EmptyState, ErrorState } from '../components/ui'
 import DashboardMetrics from '../components/dashboard/DashboardMetrics.jsx'
 import DashboardLatestMatch from '../components/dashboard/DashboardLatestMatch.jsx'
 import EvolutionPanel from '../components/dashboard/EvolutionPanel.jsx'
-import DashboardEvolution from '../components/dashboard/DashboardEvolution.jsx'
 import MovimientoCard from '../components/dashboard/MovimientoCard.jsx'
-import PeloteosCard from '../components/dashboard/PeloteosCard.jsx'
 import SaqueCard from '../components/dashboard/SaqueCard.jsx'
 import BloqueVacio from '../components/layout/BloqueVacio.jsx'
 import PdfJugador from '../components/pdf/PdfJugador.jsx'
@@ -29,6 +27,9 @@ import './jugadores.css'
 import './dashboard.css'
 import { EsqueletoJugadores, EsqueletoResumen } from '../components/dashboard/EsqueletoDashboard.jsx'
 import PelotaTitulo from '../components/layout/PelotaTitulo.jsx'
+
+const DashboardEvolution = lazy(() => import('../components/dashboard/DashboardEvolution.jsx'))
+const PeloteosCard = lazy(() => import('../components/dashboard/PeloteosCard.jsx'))
 
 const tarjeta = 'rounded-card border border-line bg-surface p-5'
 const subtitulo = 'font-display text-[22px] leading-tight font-bold tracking-[0.01em]'
@@ -156,14 +157,18 @@ function SeccionesDashboard({ conEvolucion = false, latestMatch, filtered = fals
             <EvolutionPanel playerId={playerId} evolution={evolution} sample={sample} renderEvolution={renderEvolution} />
             <section className="dashboard-panel dashboard-evolution" aria-labelledby="serve-evolution-title">
               <div className="dashboard-panel-heading"><div><p className="players-eyebrow">Hasta el bote, por partido</p><h2 id="serve-evolution-title">Evolución del saque</h2></div><span className="dashboard-unit">Partidos analizados</span></div>
-              <DashboardEvolution playerId={playerId} evolution={serveEvolution} metric="averageServeSpeed" sample={sample} />
+              <Suspense fallback={<div className="dashboard-grafico-espera" />}>
+                <DashboardEvolution playerId={playerId} evolution={serveEvolution} metric="averageServeSpeed" sample={sample} />
+              </Suspense>
             </section>
           </>
         )}
       </div>
       {!conEvolucion && (
         <div className={rejilla}>
-          <PeloteosCard rallies={details?.rallies} playerId={playerId} />
+          <Suspense fallback={<div className={`${tarjeta} dashboard-grafico-espera`} />}>
+            <PeloteosCard rallies={details?.rallies} playerId={playerId} />
+          </Suspense>
           <MovimientoCard movement={details?.movement} />
         </div>
       )}
