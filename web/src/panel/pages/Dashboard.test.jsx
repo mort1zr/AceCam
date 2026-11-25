@@ -36,7 +36,7 @@ describe('Dashboard v1 · interfaz PCIT-138', () => {
     expect(within(card('Dobles faltas')).getByText('0')).toBeTruthy()
     expect(screen.getByText('Modo demostración')).toBeTruthy()
     expect(screen.getAllByText('Valor de ejemplo')).toHaveLength(4)
-    expect(screen.getByText('Ver datos del gráfico')).toBeTruthy()
+    expect(await screen.findByText('Ver datos del gráfico')).toBeTruthy()
   })
 
   it('sin jugador elegido muestra la lista y al tocar uno se despliega su resumen', async () => {

@@ -99,3 +99,5 @@
 }
 .saque-segmento { display: block; height: 100%; }
 @keyframes saque-crece { from { transform: scaleX(0); opacity: 0.4; } to { transform: scaleX(1); opacity: 1; } }
+
+.dashboard-grafico-espera { min-height: 260px; }

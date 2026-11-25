@@ -102,7 +102,7 @@ function MatchesList({ matchesService, playersService, notesService, videoServic
 
   return (
     <>
-      {!loading && !error && (matches.rows.length > 0 || filtered) && (
+      {!error && (loading || matches.rows.length > 0 || filtered) && (
         <>
           <div className="mt-5 grid grid-cols-2 items-end gap-3 sm:grid-cols-[repeat(auto-fit,minmax(min(100%,11rem),1fr))]" role="group" aria-label="Filtros de partidos">
             <div className="players-field col-span-2 sm:col-span-1">
@@ -128,7 +128,7 @@ function MatchesList({ matchesService, playersService, notesService, videoServic
       )}
       {!showRangeError && (
         <section className="mt-5" aria-label="Historial de partidos" ref={historySection} tabIndex={-1}>
-          {!loading && !error && <p className="mb-3 text-sm text-muted" role="status">{rows.length} {rows.length === 1 ? 'partido' : 'partidos'}</p>}
+          {!error && <p className="mb-3 text-sm text-muted" role="status">{loading ? '\u00a0' : `${rows.length} ${rows.length === 1 ? 'partido' : 'partidos'}`}</p>}
           {!error && loading ? <EsqueletoTabla etiqueta="partidos" /> : (
             <DataTable
               resizable
