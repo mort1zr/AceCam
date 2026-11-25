@@ -5,6 +5,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { useAuth } from '../context/AuthContext.js'
 import { usePruebaDisponible } from '../hooks/usePruebaDisponible.js'
 import Checkout from './Checkout.jsx'
+import enlaces from '../lib/stripeEnlaces.json'
 
 vi.mock('../context/AuthContext.js', () => ({ useAuth: vi.fn() }))
 vi.mock('../hooks/usePruebaDisponible.js', () => ({ usePruebaDisponible: vi.fn() }))
@@ -19,34 +20,60 @@ beforeEach(() => {
 })
 afterEach(cleanup)
 
-function pagar(contratar, url = '/checkout?plan=pro&ciclo=anual') {
-  render(<MemoryRouter initialEntries={[url]}><Checkout contratar={contratar} /></MemoryRouter>)
-  const anio = String((new Date().getFullYear() + 2) % 100).padStart(2, '0')
-  fireEvent.change(document.getElementById('nombre'), { target: { name: 'nombre', value: 'Coach Demo' } })
-  fireEvent.change(document.getElementById('numero'), { target: { name: 'numero', value: '4242424242424242' } })
-  fireEvent.change(document.getElementById('vencimiento'), { target: { name: 'vencimiento', value: `12${anio}` } })
-  fireEvent.change(document.getElementById('cvc'), { target: { name: 'cvc', value: '123' } })
-  fireEvent.submit(document.getElementById('checkout-pago'))
+function volverDeStripe(contratar, url = '/checkout?pago=ok&plan=pro&ciclo=anual&sesion=cs_test_1') {
+  render(<MemoryRouter initialEntries={[url]}><Checkout contratar={contratar} session={{ orgId: 'org-1' }} /></MemoryRouter>)
 }
 
-it('guarda el plan y periodo elegidos y muestra la confirmación', async () => {
+it('lleva a Stripe con el enlace del plan y periodo, y la organización como referencia', () => {
+  const irA = vi.fn()
+  render(<MemoryRouter initialEntries={['/checkout?plan=pro&ciclo=anual']}><Checkout session={{ orgId: 'org-1' }} irA={irA} /></MemoryRouter>)
+  fireEvent.submit(document.getElementById('checkout-pago'))
+  const destino = new URL(irA.mock.calls[0][0])
+  expect(destino.origin + destino.pathname).toBe(enlaces.pro.anual.url)
+  expect(destino.searchParams.get('client_reference_id')).toBe('org-1')
+})
+
+it('Básico usa el enlace con prueba solo si la organización aún no la usó', () => {
+  const irA = vi.fn()
+  render(<MemoryRouter initialEntries={['/checkout?plan=basico']}><Checkout session={{ orgId: 'org-1' }} irA={irA} /></MemoryRouter>)
+  fireEvent.submit(document.getElementById('checkout-pago'))
+  expect(irA.mock.calls[0][0].startsWith(enlaces.basico.mensual.urlPrueba)).toBe(true)
+  cleanup()
+  usePruebaDisponible.mockReturnValue(false)
+  render(<MemoryRouter initialEntries={['/checkout?plan=basico']}><Checkout session={{ orgId: 'org-1' }} irA={irA} /></MemoryRouter>)
+  fireEvent.submit(document.getElementById('checkout-pago'))
+  expect(irA.mock.calls[1][0].startsWith(enlaces.basico.mensual.url)).toBe(true)
+})
+
+it('al volver de Stripe guarda el plan y periodo pagados y muestra la confirmación', async () => {
   const contratar = vi.fn().mockResolvedValue('pro')
-  pagar(contratar)
-  expect(await screen.findByText('Tu plan Pro está activo', {}, { timeout: 3000 })).toBeTruthy()
-  expect(contratar).toHaveBeenCalledWith({ plan: 'pro', periodo: 'anual' })
+  volverDeStripe(contratar)
+  expect(await screen.findByText('Tu plan Pro está activo')).toBeTruthy()
+  expect(screen.getByText('Stripe · modo prueba')).toBeTruthy()
+  expect(contratar).toHaveBeenCalledExactlyOnceWith({ plan: 'pro', periodo: 'anual' })
 })
 
 it('Básico muestra el mes de prueba solo si se guardó como prueba', async () => {
-  pagar(vi.fn().mockResolvedValue('basico'), '/checkout?plan=basico')
-  expect(await screen.findByText('Ya puedes entrar al panel y empezar a analizar partidos.', {}, { timeout: 3000 })).toBeTruthy()
+  volverDeStripe(vi.fn().mockResolvedValue('basico'), '/checkout?pago=ok&plan=basico')
+  expect(await screen.findByText('Ya puedes entrar al panel y empezar a analizar partidos.')).toBeTruthy()
   cleanup()
-  pagar(vi.fn().mockResolvedValue('prueba'), '/checkout?plan=basico')
-  expect(await screen.findByText('Tu mes de prueba ya empezó.', {}, { timeout: 3000 })).toBeTruthy()
+  volverDeStripe(vi.fn().mockResolvedValue('prueba'), '/checkout?pago=ok&plan=basico')
+  expect(await screen.findByText('Tu mes de prueba ya empezó.')).toBeTruthy()
 })
 
-it('si no se puede guardar el plan, avisa y deja reintentar', async () => {
-  pagar(vi.fn().mockRejectedValue(new Error('permission-denied')))
-  expect((await screen.findByRole('alert', {}, { timeout: 3000 })).textContent).toContain('No pudimos activar el plan')
+it('espera a tener la organización de la sesión antes de activar el plan', async () => {
+  const contratar = vi.fn().mockResolvedValue('pro')
+  const url = '/checkout?pago=ok&plan=pro&ciclo=mensual'
+  const { rerender } = render(<MemoryRouter initialEntries={[url]}><Checkout contratar={contratar} /></MemoryRouter>)
+  expect(contratar).not.toHaveBeenCalled()
+  rerender(<MemoryRouter initialEntries={[url]}><Checkout contratar={contratar} session={{ orgId: 'org-1' }} /></MemoryRouter>)
+  expect(await screen.findByText('Tu plan Pro está activo')).toBeTruthy()
+  expect(contratar).toHaveBeenCalledOnce()
+})
+
+it('si no se puede guardar el plan al volver, avisa', async () => {
+  volverDeStripe(vi.fn().mockRejectedValue(new Error('permission-denied')))
+  expect((await screen.findByRole('alert')).textContent).toContain('No pudimos activar el plan')
   expect(screen.queryByText(/está activo/)).toBeNull()
 })
 
@@ -62,5 +89,5 @@ it('Básico se cobra sin prueba si la organización ya contrató antes (PCIT-172
   render(<MemoryRouter initialEntries={['/checkout?plan=basico']}><Checkout session={{ orgId: 'org-1' }} /></MemoryRouter>)
   expect(screen.queryByText('1 mes de prueba gratis')).toBeNull()
   expect(screen.queryByRole('button', { name: /Empezar prueba gratis/ })).toBeNull()
-  expect(screen.getByRole('button', { name: /Pagar y activar/ })).toBeTruthy()
+  expect(screen.getByRole('button', { name: /Pagar con Stripe/ })).toBeTruthy()
 })
