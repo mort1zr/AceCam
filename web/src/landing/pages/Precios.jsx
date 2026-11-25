@@ -6,6 +6,7 @@ import FooterGrande from '../components/FooterGrande.jsx'
 import Logo from '../../compartido/components/Logo.jsx'
 import { useTextos } from '../../compartido/lib/idioma.jsx'
 import { inclinar } from '../lib/inclinar.js'
+import { montoPlan, precioPlan } from '../../panel/lib/preciosPlanes.js'
 
 const INCLINACION = 8
 
@@ -36,7 +37,7 @@ const textos = {
       {
         nombre: 'Básico',
         para: 'Para jugadores y padres',
-        precio: { mensual: '[PRECIO]', anual: '[PRECIO]' },
+        precio: { mensual: precioPlan('basico', 'mensual'), anual: precioPlan('basico', 'anual', { porMes: true }) },
         detalle: 'por mes',
         prueba: {
           titulo: '1 mes de prueba gratis',
@@ -55,7 +56,7 @@ const textos = {
       {
         nombre: 'Pro',
         para: 'Para entrenadores y reclutadores',
-        precio: { mensual: '[PRECIO]', anual: '[PRECIO]' },
+        precio: { mensual: precioPlan('pro', 'mensual'), anual: precioPlan('pro', 'anual', { porMes: true }) },
         detalle: 'por mes',
         popular: true,
         tono: 'pro',
@@ -73,7 +74,7 @@ const textos = {
       {
         nombre: 'Ultra',
         para: 'Para academias, clubes y universidades',
-        precio: { mensual: '[PRECIO]', anual: '[PRECIO]' },
+        precio: { mensual: precioPlan('ultra', 'mensual'), anual: precioPlan('ultra', 'anual', { porMes: true }) },
         detalle: 'por mes',
         tono: 'ultra',
         base: 'Todo lo de Pro, más:',
@@ -150,6 +151,12 @@ const textos = {
     meses: 'meses',
     popular: 'Más popular',
     facturado: ', facturado al año',
+    porMesCorto: '/mes',
+    decimal: ',',
+    mesGratis: 'Ahorras 1 mes',
+    primerMes: 'Primer mes gratis',
+    cobroMensual: 'USD, cobrado cada mes. Cancela cuando quieras.',
+    cobroAnual: (total) => `USD ${total} en un solo pago al año.`,
     comparar: 'Compara nuestros planes',
     resumen: 'Comparación de los planes Básico y Pro',
     funciones: 'Funciones',
@@ -163,7 +170,7 @@ const textos = {
       {
         nombre: 'Basic',
         para: 'For players and parents',
-        precio: { mensual: '[PRICE]', anual: '[PRICE]' },
+        precio: { mensual: precioPlan('basico', 'mensual'), anual: precioPlan('basico', 'anual', { porMes: true }) },
         detalle: 'per month',
         prueba: {
           titulo: '1-month free trial',
@@ -182,7 +189,7 @@ const textos = {
       {
         nombre: 'Pro',
         para: 'For coaches and recruiters',
-        precio: { mensual: '[PRICE]', anual: '[PRICE]' },
+        precio: { mensual: precioPlan('pro', 'mensual'), anual: precioPlan('pro', 'anual', { porMes: true }) },
         detalle: 'per month',
         popular: true,
         tono: 'pro',
@@ -200,7 +207,7 @@ const textos = {
       {
         nombre: 'Ultra',
         para: 'For academies, clubs and universities',
-        precio: { mensual: '[PRICE]', anual: '[PRICE]' },
+        precio: { mensual: precioPlan('ultra', 'mensual'), anual: precioPlan('ultra', 'anual', { porMes: true }) },
         detalle: 'per month',
         tono: 'ultra',
         base: 'Everything in Pro, plus:',
@@ -277,6 +284,12 @@ const textos = {
     meses: 'months',
     popular: 'Most popular',
     facturado: ', billed yearly',
+    porMesCorto: '/mo',
+    decimal: '.',
+    mesGratis: 'Save 1 month',
+    primerMes: 'First month free',
+    cobroMensual: 'USD, billed monthly. Cancel anytime.',
+    cobroAnual: (total) => `USD ${total} billed once a year.`,
     comparar: 'Compare our plans',
     resumen: 'Comparison of the Basic and Pro plans',
     funciones: 'Features',
@@ -722,13 +735,7 @@ function Plan({ plan, anual, oculto = false }) {
       <h2 className="text-2xl">{plan.nombre}</h2>
       <p className="mt-1 text-sm text-muted">{plan.para}</p>
 
-      <p className="mt-8 font-display text-4xl font-semibold">
-        {anual ? plan.precio.anual : plan.precio.mensual}
-      </p>
-      <p className="mt-1 text-sm text-muted">
-        {plan.detalle}
-        {anual ? t.facturado : ''}
-      </p>
+      <PrecioGrande clave={new URLSearchParams(plan.accion.to.split('?')[1]).get('plan')} anual={anual} prueba={Boolean(plan.prueba)} t={t} />
 
       {plan.prueba ? (
         <div className="mt-6 rounded-2xl border border-accent-line bg-accent/10 p-4">
@@ -763,6 +770,44 @@ function Plan({ plan, anual, oculto = false }) {
         </LinkDeslizante>
       </div>
     </article>
+  )
+}
+
+function PrecioGrande({ clave, anual, prueba, t }) {
+  const mensual = montoPlan(clave, 'mensual')
+  const total = montoPlan(clave, 'anual')
+  const valor = anual ? total / 12 : mensual
+  const [entero, decimales] = valor.toFixed(2).split('.')
+  return (
+    <div className="mt-8">
+      <p key={anual ? 'anual' : 'mensual'} className="precio-entra flex items-start font-display">
+        <span className="mt-1.5 mr-0.5 text-2xl font-semibold text-text2">$</span>
+        <span className="text-6xl leading-none font-bold tracking-tight tabular-nums">{entero}</span>
+        {decimales !== '00' ? (
+          <span className="mt-1 text-2xl font-bold tabular-nums">
+            {t.decimal}
+            {decimales}
+          </span>
+        ) : null}
+        <span className="ml-1.5 self-end pb-1 font-sans text-sm text-muted">{t.porMesCorto}</span>
+      </p>
+      <p className="mt-3 flex min-h-6 flex-wrap items-center gap-2 text-sm">
+        {anual ? (
+          <>
+            <span className="text-muted line-through decoration-1">${mensual}</span>
+            <span className="rounded-full bg-accent/15 px-2.5 py-0.5 text-xs font-semibold text-accent-ink">
+              {t.mesGratis}
+            </span>
+          </>
+        ) : null}
+        {prueba ? (
+          <span className="rounded-full bg-electric/15 px-2.5 py-0.5 text-xs font-semibold text-electric-ink">
+            {t.primerMes}
+          </span>
+        ) : null}
+      </p>
+      <p className="mt-1 text-[13px] text-muted">{anual ? t.cobroAnual(total) : t.cobroMensual}</p>
+    </div>
   )
 }
 

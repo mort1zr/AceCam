@@ -1,0 +1,40 @@
+{
+  "basico": {
+    "mensual": {
+      "url": "https://buy.stripe.com/test_8x27sNeBngXsciw1PA6Ri0a",
+      "monto": 500,
+      "moneda": "usd",
+      "urlPrueba": "https://buy.stripe.com/test_6oUcN7eBnfTo96k2TE6Ri0b"
+    },
+    "anual": {
+      "url": "https://buy.stripe.com/test_5kQfZjdxj5eK0zO0Lw6Ri0i",
+      "monto": 5500,
+      "moneda": "usd",
+      "urlPrueba": "https://buy.stripe.com/test_7sYdRbctf4aG3M00Lw6Ri0j"
+    }
+  },
+  "pro": {
+    "mensual": {
+      "url": "https://buy.stripe.com/test_28EbJ3bpbePk82ggKu6Ri0e",
+      "monto": 2000,
+      "moneda": "usd"
+    },
+    "anual": {
+      "url": "https://buy.stripe.com/test_28E28t8cZaz43M0cue6Ri0k",
+      "monto": 22000,
+      "moneda": "usd"
+    }
+  },
+  "ultra": {
+    "mensual": {
+      "url": "https://buy.stripe.com/test_fZu28tfFr4aG82g1PA6Ri0g",
+      "monto": 5000,
+      "moneda": "usd"
+    },
+    "anual": {
+      "url": "https://buy.stripe.com/test_9B6aEZal75eKciweCm6Ri0l",
+      "monto": 55000,
+      "moneda": "usd"
+    }
+  }
+}

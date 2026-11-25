@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import { Link, Navigate, useLocation, useSearchParams } from 'react-router'
 import ControlsPill from '../../compartido/components/ControlsPill.jsx'
 import LinkDeslizante from '../../compartido/components/LinkDeslizante.jsx'
@@ -6,47 +6,31 @@ import Logo from '../../compartido/components/Logo.jsx'
 import { useAterrizaje } from '../../compartido/hooks/useAterrizaje.js'
 import { useIdioma } from '../../compartido/lib/idioma.jsx'
 import Icon from '../../landing/components/Icon.jsx'
-import { Field } from '../components/AuthForm.jsx'
 import { useAuth } from '../context/AuthContext.js'
 import { useEntrada } from '../context/EntradaContext.js'
 import { usePruebaDisponible } from '../hooks/usePruebaDisponible.js'
-import {
-  formatearNumero,
-  formatearVencimiento,
-  marcaTarjeta,
-  soloDigitos,
-  validarTarjeta,
-} from '../lib/tarjeta.js'
+import enlaces from '../lib/stripeEnlaces.json'
+import { precioPlan } from '../lib/preciosPlanes.js'
 
 const PLANES = ['basico', 'pro', 'ultra']
-const VACIA = { nombre: '', numero: '', vencimiento: '', cvc: '' }
-const PROCESAR_MS = 1600
+const precioDe = (plan, periodo) => precioPlan(plan, periodo)
 
 const textos = {
   es: {
     volver: 'Volver a precios',
     pasos: ['Plan', 'Pago', 'Listo'],
     titulo: 'Activa tu plan',
-    subtitulo: 'Elige el plan y el periodo, y agrega tu tarjeta.',
+    subtitulo: 'Elige el plan y el periodo, y paga en la página segura de Stripe.',
     tuPlan: 'Tu plan',
     periodo: 'Periodo',
     mensual: 'Mensual',
     anual: 'Anual',
     metodo: 'Método de pago',
-    tarjeta: 'Tarjeta de crédito o débito',
-    simulado: 'Pago simulado: no se hace ningún cobro real. Usa 4242 4242 4242 4242.',
-    nombre: 'Nombre en la tarjeta',
-    numero: 'Número de tarjeta',
-    vencimiento: 'Vencimiento',
-    cvc: 'CVC',
-    errores: {
-      nombre: 'Escribe el nombre como aparece en la tarjeta.',
-      numero: 'Revisa el número de la tarjeta.',
-      vencimiento: 'Usa MM/AA con una fecha futura.',
-      cvc: 'Revisa el código de seguridad.',
-    },
+    tarjeta: 'Tarjeta de crédito o débito, con Stripe',
+    stripe: 'Al continuar te llevamos a Stripe para pagar. Está en modo prueba: no se hace ningún cobro real.',
+    tarjetaPrueba: 'Tarjeta de prueba',
+    tarjetaPruebaDetalle: 'cualquier fecha futura y cualquier CVC',
     resumen: 'Resumen',
-    precio: '[PRECIO]',
     porMes: 'por mes',
     porAnio: 'por año',
     prueba: '1 mes de prueba gratis',
@@ -55,9 +39,9 @@ const textos = {
     luego: (precio, periodo) => `Luego ${precio} ${periodo}. Cancela cuando quieras.`,
     renueva: (periodo) =>
       `Se renueva ${periodo === 'anual' ? 'cada año' : 'cada mes'}. Cancela cuando quieras.`,
-    pagar: 'Pagar y activar',
+    pagar: 'Pagar con Stripe',
     empezarPrueba: 'Empezar prueba gratis',
-    procesando: 'Procesando pago…',
+    procesando: 'Abriendo Stripe…',
     seguro: 'Tus datos de pago no se guardan en AceCam.',
     fallo: 'No pudimos activar el plan. Revisa tu conexión e inténtalo otra vez; no se hizo ningún cobro.',
     listoTitulo: (plan) => `Tu plan ${plan} está activo`,
@@ -65,7 +49,8 @@ const textos = {
     listoTexto: 'Ya puedes entrar al panel y empezar a analizar partidos.',
     recibo: 'Recibo',
     pagado: 'Pagado hoy',
-    termina: 'Tarjeta terminada en',
+    termina: 'Pagado con',
+    stripeModo: 'Stripe · modo prueba',
     irPanel: 'Ir al panel',
     verPlan: 'Ver mi plan',
     planes: {
@@ -90,26 +75,17 @@ const textos = {
     volver: 'Back to pricing',
     pasos: ['Plan', 'Payment', 'Done'],
     titulo: 'Activate your plan',
-    subtitulo: 'Choose the plan and billing period, then add your card.',
+    subtitulo: 'Choose the plan and billing period, then pay on Stripe’s secure page.',
     tuPlan: 'Your plan',
     periodo: 'Billing',
     mensual: 'Monthly',
     anual: 'Yearly',
     metodo: 'Payment method',
-    tarjeta: 'Credit or debit card',
-    simulado: 'Simulated payment: no real charge is made. Use 4242 4242 4242 4242.',
-    nombre: 'Name on card',
-    numero: 'Card number',
-    vencimiento: 'Expiry',
-    cvc: 'CVC',
-    errores: {
-      nombre: 'Type the name as it appears on the card.',
-      numero: 'Check the card number.',
-      vencimiento: 'Use MM/YY with a future date.',
-      cvc: 'Check the security code.',
-    },
+    tarjeta: 'Credit or debit card, with Stripe',
+    stripe: 'When you continue we take you to Stripe to pay. It is in test mode: no real charge is made.',
+    tarjetaPrueba: 'Test card',
+    tarjetaPruebaDetalle: 'any future date and any CVC',
     resumen: 'Summary',
-    precio: '[PRICE]',
     porMes: 'per month',
     porAnio: 'per year',
     prueba: '1-month free trial',
@@ -118,9 +94,9 @@ const textos = {
     luego: (precio, periodo) => `Then ${precio} ${periodo}. Cancel anytime.`,
     renueva: (periodo) =>
       `Renews ${periodo === 'anual' ? 'every year' : 'every month'}. Cancel anytime.`,
-    pagar: 'Pay and activate',
+    pagar: 'Pay with Stripe',
     empezarPrueba: 'Start free trial',
-    procesando: 'Processing payment…',
+    procesando: 'Opening Stripe…',
     fallo: 'We could not activate the plan. Check your connection and try again; you were not charged.',
     seguro: 'Your payment details are not stored by AceCam.',
     listoTitulo: (plan) => `Your ${plan} plan is active`,
@@ -128,7 +104,8 @@ const textos = {
     listoTexto: 'You can now open the dashboard and start analyzing matches.',
     recibo: 'Receipt',
     pagado: 'Paid today',
-    termina: 'Card ending in',
+    termina: 'Paid with',
+    stripeModo: 'Stripe · test mode',
     irPanel: 'Go to dashboard',
     verPlan: 'View my plan',
     planes: {
@@ -265,9 +242,8 @@ function ElegirPlan({ t, plan, onPlan, periodo, onPeriodo, conPrueba }) {
   )
 }
 
-function Pago({ t, valores, errores, onCambio, bloqueado }) {
+function Pago({ t }) {
   const id = useId()
-  const marca = marcaTarjeta(valores.numero)
   return (
     <section className={tarjeta} aria-labelledby={`${id}-pago`}>
       <h2 id={`${id}-pago`} className={subtitulo}>
@@ -278,63 +254,20 @@ function Pago({ t, valores, errores, onCambio, bloqueado }) {
         <span className="mt-0.5 shrink-0 text-electric-ink">
           <Icon name="shield" size={15} strokeWidth={2} />
         </span>
-        {t.simulado}
+        {t.stripe}
       </p>
-      <fieldset disabled={bloqueado} className="mt-5 grid gap-4">
-        <Field
-          id="nombre"
-          label={t.nombre}
-          autoComplete="cc-name"
-          value={valores.nombre}
-          onChange={onCambio}
-          error={errores.nombre && t.errores.nombre}
-        />
-        <div className="relative">
-          <Field
-            id="numero"
-            label={t.numero}
-            autoComplete="cc-number"
-            inputMode="numeric"
-            placeholder="1234 1234 1234 1234"
-            value={valores.numero}
-            onChange={onCambio}
-            error={errores.numero && t.errores.numero}
-          />
-          {marca && (
-            <span className="pointer-events-none absolute top-[2.15rem] right-3 rounded-[4px] bg-surface2 px-1.5 py-0.5 font-display text-[10px] font-bold tracking-[0.06em] text-text2 uppercase">
-              {marca}
-            </span>
-          )}
-        </div>
-        <div className="grid grid-cols-2 gap-4">
-          <Field
-            id="vencimiento"
-            label={t.vencimiento}
-            autoComplete="cc-exp"
-            inputMode="numeric"
-            placeholder="MM/AA"
-            value={valores.vencimiento}
-            onChange={onCambio}
-            error={errores.vencimiento && t.errores.vencimiento}
-          />
-          <Field
-            id="cvc"
-            label={t.cvc}
-            autoComplete="cc-csc"
-            inputMode="numeric"
-            placeholder="123"
-            value={valores.cvc}
-            onChange={onCambio}
-            error={errores.cvc && t.errores.cvc}
-          />
-        </div>
-      </fieldset>
+      <div className="mt-4 rounded-xl border border-line2 bg-surface2 px-4 py-3">
+        <p className="text-xs font-semibold tracking-[0.08em] text-muted uppercase">{t.tarjetaPrueba}</p>
+        <p className="mt-1 font-display text-xl font-bold tracking-[0.06em] tabular-nums">4242 4242 4242 4242</p>
+        <p className="text-[13px] text-muted">{t.tarjetaPruebaDetalle}</p>
+      </div>
     </section>
   )
 }
 
 function Resumen({ t, plan, periodo, procesando, conPrueba }) {
   const opcion = t.planes[plan]
+  const precio = precioDe(plan, periodo)
   // Solo se ofrece la prueba si la organización todavía no la usó (PCIT-172).
   const prueba = plan === 'basico' && conPrueba
   const porPeriodo = periodo === 'anual' ? t.porAnio : t.porMes
@@ -347,7 +280,7 @@ function Resumen({ t, plan, periodo, procesando, conPrueba }) {
           <p className="text-[13px] text-muted">{t[periodo]}</p>
         </div>
         <p className="text-right">
-          <span className="block font-semibold">{t.precio}</span>
+          <span className="block font-semibold">{precio}</span>
           <span className="text-[13px] text-muted">{porPeriodo}</span>
         </p>
       </div>
@@ -364,15 +297,15 @@ function Resumen({ t, plan, periodo, procesando, conPrueba }) {
       {prueba && (
         <p className="flex items-center justify-between rounded-lg bg-electric/10 px-3 py-2 text-sm">
           <span>{t.prueba}</span>
-          <span className="font-semibold text-electric-ink">−{t.precio}</span>
+          <span className="font-semibold text-electric-ink">−{precio}</span>
         </p>
       )}
       <div className="flex items-baseline justify-between border-t border-chip pt-4">
         <span className="font-semibold">{t.hoy}</span>
-        <span className="font-display text-3xl font-bold">{prueba ? t.gratis : t.precio}</span>
+        <span className="font-display text-3xl font-bold">{prueba ? t.gratis : precio}</span>
       </div>
       <p className="-mt-3 text-xs text-muted">
-        {prueba ? t.luego(t.precio, porPeriodo) : t.renueva(periodo)}
+        {prueba ? t.luego(precio, porPeriodo) : t.renueva(periodo)}
       </p>
       <button
         type="submit"
@@ -403,8 +336,9 @@ function Resumen({ t, plan, periodo, procesando, conPrueba }) {
   )
 }
 
-function Confirmacion({ t, plan, periodo, ultimos, prueba }) {
+function Confirmacion({ t, plan, periodo, prueba }) {
   const opcion = t.planes[plan]
+  const precio = precioDe(plan, periodo)
   return (
     <section className={`${tarjeta} mx-auto flex max-w-lg flex-col items-center gap-5 text-center`}>
       <span className="grid size-16 place-items-center rounded-full bg-accent text-on-accent shadow-[0_8px_30px_-8px_var(--accent)]">
@@ -426,11 +360,11 @@ function Confirmacion({ t, plan, periodo, ultimos, prueba }) {
         </div>
         <div className="flex justify-between py-1">
           <dt className="text-muted">{t.pagado}</dt>
-          <dd className="font-semibold">{prueba ? t.gratis : t.precio}</dd>
+          <dd className="font-semibold">{prueba ? t.gratis : precio}</dd>
         </div>
         <div className="flex justify-between py-1">
           <dt className="text-muted">{t.termina}</dt>
-          <dd className="font-semibold">•••• {ultimos}</dd>
+          <dd className="font-semibold">{t.stripeModo}</dd>
         </div>
       </dl>
       <div className="flex w-full flex-col gap-2 sm:flex-row">
@@ -452,7 +386,7 @@ function Confirmacion({ t, plan, periodo, ultimos, prueba }) {
   )
 }
 
-export default function Checkout({ contratar = async () => {}, db, session }) {
+export default function Checkout({ contratar = async () => {}, db, session, irA = (url) => window.location.assign(url) }) {
   const { user, loading } = useAuth()
   const location = useLocation()
   const entrada = useEntrada()
@@ -462,17 +396,36 @@ export default function Checkout({ contratar = async () => {}, db, session }) {
   const [parametros, setParametros] = useSearchParams()
   const plan = PLANES.includes(parametros.get('plan')) ? parametros.get('plan') : 'pro'
   const periodo = parametros.get('ciclo') === 'anual' ? 'anual' : 'mensual'
-  const [valores, setValores] = useState(VACIA)
-  const [errores, setErrores] = useState({})
   const [procesando, setProcesando] = useState(false)
   const [listo, setListo] = useState(null)
   // null mientras carga: se muestra la prueba, que es el caso de una cuenta nueva.
   const pruebaDisponible = usePruebaDisponible(db, session?.orgId)
   const [fallo, setFallo] = useState(false)
+  const pagado = parametros.get('pago') === 'ok'
+  const activando = useRef(false)
 
   useEffect(() => {
     entrada?.panelListo()
   }, [entrada])
+
+  useEffect(() => {
+    if (!pagado || !user || !session?.orgId || activando.current) return
+    activando.current = true
+    setProcesando(true)
+    contratar({ plan, periodo })
+      .then((guardado) => {
+        const prueba = guardado ? guardado === 'prueba' : plan === 'basico' && pruebaDisponible !== false
+        setListo({ prueba })
+        window.scrollTo({ top: 0 })
+      })
+      .catch(() => setFallo(true))
+      .finally(() => {
+        setProcesando(false)
+        const siguientes = new URLSearchParams(parametros)
+        for (const clave of ['pago', 'sesion']) siguientes.delete(clave)
+        setParametros(siguientes, { replace: true })
+      })
+  }, [pagado, user, session?.orgId, contratar, plan, periodo, pruebaDisponible, parametros, setParametros])
 
   if (loading) return <div aria-busy="true" className="min-h-dvh bg-bg" />
   if (!user) return <Navigate to="/registro" replace state={{ from: location }} />
@@ -483,47 +436,16 @@ export default function Checkout({ contratar = async () => {}, db, session }) {
     setParametros(siguientes, { replace: true })
   }
 
-  const cambiar = (evento) => {
-    const { name, value } = evento.target
-    const formateado =
-      name === 'numero'
-        ? formatearNumero(value)
-        : name === 'vencimiento'
-          ? formatearVencimiento(value)
-          : name === 'cvc'
-            ? soloDigitos(value).slice(0, marcaTarjeta(valores.numero) === 'amex' ? 4 : 3)
-            : value
-    setValores((actual) => ({ ...actual, [name]: formateado }))
-    if (errores[name]) setErrores((actual) => ({ ...actual, [name]: undefined }))
-  }
-
-  const pagar = async (evento) => {
+  const pagar = (evento) => {
     evento.preventDefault()
-    const encontrados = validarTarjeta(valores)
-    setErrores(encontrados)
-    if (Object.keys(encontrados).length) {
-      document.getElementById(Object.keys(encontrados)[0])?.focus()
-      return
-    }
+    const enlace = enlaces[plan][periodo]
+    const url = plan === 'basico' && pruebaDisponible !== false && enlace.urlPrueba ? enlace.urlPrueba : enlace.url
+    const destino = new URL(url)
+    const orgId = session?.orgId
+    if (typeof orgId === 'string' && /^[\w-]{1,200}$/.test(orgId)) destino.searchParams.set('client_reference_id', orgId)
     setProcesando(true)
     setFallo(false)
-    let guardado
-    try {
-      ;[guardado] = await Promise.all([
-        contratar({ plan, periodo }),
-        new Promise((resolver) => setTimeout(resolver, PROCESAR_MS)),
-      ])
-    } catch {
-      setFallo(true)
-      setProcesando(false)
-      return
-    }
-    // Básico es mes de prueba solo la primera vez (PCIT-158).
-    const prueba = guardado ? guardado === 'prueba' : plan === 'basico' && pruebaDisponible !== false
-    setListo({ ultimos: soloDigitos(valores.numero).slice(-4), prueba })
-    setValores(VACIA)
-    setProcesando(false)
-    window.scrollTo({ top: 0 })
+    irA(destino.toString())
   }
 
   return (
@@ -563,7 +485,7 @@ export default function Checkout({ contratar = async () => {}, db, session }) {
 
         <div className="mt-8">
           {listo ? (
-            <Confirmacion t={t} plan={plan} periodo={periodo} ultimos={listo.ultimos} prueba={listo.prueba} />
+            <Confirmacion t={t} plan={plan} periodo={periodo} prueba={listo.prueba} />
           ) : (
             <div className="grid items-start gap-5 lg:grid-cols-[1fr_380px]">
               <form id="checkout-pago" className="flex flex-col gap-5" onSubmit={pagar} noValidate>
@@ -575,13 +497,7 @@ export default function Checkout({ contratar = async () => {}, db, session }) {
                   periodo={periodo}
                   onPeriodo={(valor) => cambiarParametro('ciclo', valor)}
                 />
-                <Pago
-                  t={t}
-                  valores={valores}
-                  errores={errores}
-                  onCambio={cambiar}
-                  bloqueado={procesando}
-                />
+                <Pago t={t} />
                 {fallo && (
                   <p role="alert" className="rounded-lg border border-bad px-4 py-3 text-sm text-bad">
                     {t.fallo}
