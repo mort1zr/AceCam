@@ -17,11 +17,13 @@ import sys
 QUEUED = "en cola"
 
 
-def queued_count(db, limit: int = 1) -> int:
-    """Cuántos partidos en cola hay (como mucho `limit`): basta con saber si hay alguno."""
-    from google.cloud.firestore_v1.base_query import FieldFilter
+def queued_count(db, field_filter, limit: int = 1) -> int:
+    """Cuántos partidos en cola hay (como mucho `limit`): basta con saber si hay alguno.
 
-    query = db.collection("matches").where(filter=FieldFilter("status", "==", QUEUED)).limit(limit)
+    `field_filter` es FieldFilter de google-cloud-firestore; se recibe como parámetro para que los
+    tests no dependan de esa librería.
+    """
+    query = db.collection("matches").where(filter=field_filter("status", "==", QUEUED)).limit(limit)
     return sum(1 for _ in query.stream())
 
 
@@ -39,12 +41,13 @@ def main() -> int:
         print("::error::Falta FIREBASE_SERVICE_ACCOUNT.", file=sys.stderr)
         return 1
     from google.cloud import firestore
+    from google.cloud.firestore_v1.base_query import FieldFilter
     from google.oauth2 import service_account
 
     info = json.loads(content)
     credentials = service_account.Credentials.from_service_account_info(info)
     db = firestore.Client(project=os.environ.get("FIREBASE_PROJECT_ID", "acecam-e93a2"), credentials=credentials)
-    write_output(queued_count(db) > 0, os.environ.get("GITHUB_OUTPUT"))
+    write_output(queued_count(db, FieldFilter) > 0, os.environ.get("GITHUB_OUTPUT"))
     return 0
 
 

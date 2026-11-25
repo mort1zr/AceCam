@@ -12,6 +12,13 @@ queued_matches = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(queued_matches)
 
 
+class FakeFilter:
+    def __init__(self, field_path, op_string, value):
+        self.field_path = field_path
+        self.op_string = op_string
+        self.value = value
+
+
 class FakeQuery:
     def __init__(self, docs, calls):
         self.docs = docs
@@ -42,7 +49,7 @@ class FakeDb:
 @pytest.mark.parametrize("docs, expected", [([], 0), (["m-1"], 1)])
 def test_counts_only_queued_matches(docs, expected):
     db = FakeDb(docs)
-    assert queued_matches.queued_count(db) == expected
+    assert queued_matches.queued_count(db, FakeFilter) == expected
     assert db.calls == [("collection", "matches"), ("where", "status", "==", "en cola"), ("limit", 1)]
 
 
