@@ -240,7 +240,8 @@ costos en [PCIT-222 · Videos en Azure](PCIT-222-videos-en-azure.md).
 | --- | --- | --- |
 | Grupo de recursos | `acecam-rg` | Contiene todo lo de AceCam en Azure |
 | Cuenta de almacenamiento | `acecamvideosfba600`, contenedor privado `videos` | Videos originales y procesados. *Soft delete* de 7 días |
-| Entorno de Container Apps | `acecam-env` | Donde corren la API y el worker |
+| Entorno de Container Apps | `acecam-env` (Express) | Donde corren la API y el servicio de postulaciones. **Express no admite Jobs** |
+| Entorno de Container Apps | `acecam-jobs-env` (estándar) | Donde corre el worker como Job (PCIT-247) |
 | Container App | `acecam-videos-api` | API que entrega enlaces temporales (SAS) para subir y ver videos |
 | Container App | `acecam-application-video` | Recibe y valida los videos del formulario público de postulación y los guarda privados en Blob (PCIT-251, ver [su documento](PCIT-251-postulaciones-en-azure.md)) |
 | Container Apps Job | `acecam-worker` | El modelo: cada 5 min procesa un partido en cola. 2 vCPU, 4 GiB, máximo 1 h, videos de hasta 90 s (`WORKER_MAX_SECONDS` en `ci.yml`) |
@@ -255,6 +256,7 @@ costos en [PCIT-222 · Videos en Azure](PCIT-222-videos-en-azure.md).
 | `AZURE_CLIENT_ID` | Variable | Client ID de `acecam-github` |
 | `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID` | Variable | Inquilino y suscripción de Azure for Students |
 | `AZURE_RESOURCE_GROUP`, `AZURE_STORAGE_ACCOUNT`, `AZURE_CONTAINERAPPS_ENV` | Variable | `acecam-rg`, `acecamvideosfba600`, `acecam-env` |
+| `AZURE_CONTAINERAPPS_JOBS_ENV` | Variable | `acecam-jobs-env`: entorno estándar para el worker (PCIT-247) |
 | `AZURE_VIDEOS_API_IDENTITY_ID`, `AZURE_VIDEOS_API_IDENTITY_CLIENT_ID` | Variable | ID de recurso y client ID de `acecam-videos-api` |
 | `VITE_VIDEO_API_URL` | Variable | URL de la API de videos. Vacía, la web vuelve a Firebase Storage |
 | `VITE_APPLICATION_VIDEO_API_URL` | Variable | URL del servicio de videos de postulación (PCIT-251). Vacía, el formulario no ofrece adjuntar video |
@@ -266,6 +268,7 @@ costos en [PCIT-222 · Videos en Azure](PCIT-222-videos-en-azure.md).
 | Falla | Causa probable y qué hacer |
 | --- | --- |
 | "Iniciar sesión en Azure": `AADSTS700213 No matching federated identity record` | El sujeto que envía GitHub no está en las credenciales federadas de `acecam-github`. Copia el *subject claim* del log y créalo tal cual (`az identity federated-credential create … --subject "<subject>"`). **Pasa cada vez que se renombra el repositorio**: el sujeto lleva el nombre, por ejemplo `repo:mort1zr@138200154/AceCam@1443135943:environment:production` |
+| "Desplegar el worker": `ExpressEnvironmentResourceNotSupported` | El entorno es Express y no admite Jobs. Crea uno estándar y apunta `AZURE_CONTAINERAPPS_JOBS_ENV` a él (ver abajo) |
 | "Comprobar configuración" avisa y salta el despliegue | Falta una variable o un secreto de 5.2. Créalo y lanza **Run workflow** sobre `main` |
 | La API no responde (`/healthz`) | Portal → `acecam-videos-api` → Registros. Suele ser el secreto `FIREBASE_SERVICE_ACCOUNT_AZURE` vencido o revocado |
 | Un partido se queda **En cola** | Portal → Trabajos de Container Apps → `acecam-worker` → Historial de ejecuciones. Si no hay ejecuciones, la tarea no existe: relanza el despliegue |
@@ -275,6 +278,19 @@ costos en [PCIT-222 · Videos en Azure](PCIT-222-videos-en-azure.md).
 ### 5.4 Pasos manuales en el portal (una sola vez)
 
 Los hace una persona con permisos en la suscripción (Cloud Shell, Bash).
+
+**Entorno estándar para el worker (PCIT-247).** `acecam-env` se creó como *Express*, que no
+admite Jobs. El worker necesita un entorno estándar en la misma región, con los mismos registros:
+
+```bash
+WS_ID=$(az monitor log-analytics workspace show -g acecam-rg -n acecam-logs --query customerId -o tsv)
+WS_KEY=$(az monitor log-analytics workspace get-shared-keys -g acecam-rg -n acecam-logs --query primarySharedKey -o tsv)
+az containerapp env create -n acecam-jobs-env -g acecam-rg -l chilecentral \
+  --logs-workspace-id "$WS_ID" --logs-workspace-key "$WS_KEY"
+```
+
+Después crea en GitHub la variable `AZURE_CONTAINERAPPS_JOBS_ENV` = `acecam-jobs-env` y vuelve a
+desplegar. Un entorno de consumo no cobra mientras no corre nada; el Job solo gasta cuando se ejecuta.
 
 **Desactivar el acceso por clave compartida.** La API firma los enlaces con la identidad
 (*user delegation SAS*) y el worker usa su identidad: ninguno usa la clave de la cuenta.

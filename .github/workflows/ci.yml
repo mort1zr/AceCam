@@ -356,8 +356,10 @@ jobs:
   owasp-zap-baseline:
     name: "OWASP: ZAP Baseline (DAST)"
     needs: deploy
+    # always(): sin él, un job omitido más atrás en la cadena (Dependency Review fuera de una
+    # PR) hace que GitHub salte también este, aunque deploy haya salido bien.
     if: |
-      needs.deploy.result == 'success'
+      always() && needs.deploy.result == 'success'
       && (github.ref == 'refs/heads/main' || (github.event_name == 'pull_request' && needs.deploy.outputs.preview_url != ''))
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -1065,7 +1067,9 @@ jobs:
         if: steps.config.outputs.ok == 'true'
         env:
           RG: ${{ vars.AZURE_RESOURCE_GROUP }}
-          ENVIRONMENT: ${{ vars.AZURE_CONTAINERAPPS_ENV }}
+          # PCIT-247: un entorno Express (acecam-env) no admite Jobs. El worker va en un entorno
+          # estándar aparte (devsecops.md §5.3); sin la variable, se intenta en el de la API.
+          ENVIRONMENT: ${{ vars.AZURE_CONTAINERAPPS_JOBS_ENV || vars.AZURE_CONTAINERAPPS_ENV }}
           STORAGE: ${{ vars.AZURE_STORAGE_ACCOUNT }}
           IDENTITY: ${{ vars.AZURE_VIDEOS_API_IDENTITY_ID }}
           IDENTITY_CLIENT_ID: ${{ vars.AZURE_VIDEOS_API_IDENTITY_CLIENT_ID }}
