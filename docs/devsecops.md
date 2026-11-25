@@ -241,7 +241,7 @@ costos en [PCIT-222 · Videos en Azure](PCIT-222-videos-en-azure.md).
 | Grupo de recursos | `acecam-rg` | Contiene todo lo de AceCam en Azure |
 | Cuenta de almacenamiento | `acecamvideosfba600`, contenedor privado `videos` | Videos originales y procesados. *Soft delete* de 7 días |
 | Entorno de Container Apps | `acecam-env` (Express) | Donde corren la API y el servicio de postulaciones. **Express no admite Jobs** |
-| Entorno de Container Apps | `acecam-jobs-env` (estándar) | Donde corre el worker como Job (PCIT-247) |
+| Entorno de Container Apps | `acecam-jobs-env` (estándar, *Consumption*, **Brazil South**) | Donde corre el worker como Job (PCIT-247). Lee los videos de la cuenta de Chile Central |
 | Container App | `acecam-videos-api` | API que entrega enlaces temporales (SAS) para subir y ver videos |
 | Container App | `acecam-application-video` | Recibe y valida los videos del formulario público de postulación y los guarda privados en Blob (PCIT-251, ver [su documento](PCIT-251-postulaciones-en-azure.md)) |
 | Container Apps Job | `acecam-worker` | El modelo: cada 5 min procesa un partido en cola. 2 vCPU, 4 GiB, máximo 1 h, videos de hasta 90 s (`WORKER_MAX_SECONDS` en `ci.yml`) |
@@ -280,12 +280,14 @@ costos en [PCIT-222 · Videos en Azure](PCIT-222-videos-en-azure.md).
 Los hace una persona con permisos en la suscripción (Cloud Shell, Bash).
 
 **Entorno estándar para el worker (PCIT-247).** `acecam-env` se creó como *Express*, que no
-admite Jobs. El worker necesita un entorno estándar en la misma región, con los mismos registros:
+admite Jobs. El worker necesita un entorno estándar. En Chile Central la suscripción solo admite un entorno y
+siempre lo crea Express (`MaxNumberOfRegionalExpressEnvironmentsInSubExceeded`), así que se creó en
+**Brazil South**, otra región permitida, con los mismos registros:
 
 ```bash
 WS_ID=$(az monitor log-analytics workspace show -g acecam-rg -n acecam-logs --query customerId -o tsv)
 WS_KEY=$(az monitor log-analytics workspace get-shared-keys -g acecam-rg -n acecam-logs --query primarySharedKey -o tsv)
-az containerapp env create -n acecam-jobs-env -g acecam-rg -l chilecentral \
+az containerapp env create -n acecam-jobs-env -g acecam-rg -l brazilsouth \
   --logs-workspace-id "$WS_ID" --logs-workspace-key "$WS_KEY"
 ```
 
