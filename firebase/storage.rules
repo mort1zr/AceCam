@@ -27,7 +27,7 @@ service firebase.storage {
       let path = /databases/(default)/documents/matches/$(matchId);
       // PCIT-188: la administración de plataforma no concede acceso a videos.
       // Este permiso se decide con el rol y la organización de la ficha del equipo.
-      return user.orgId == orgId && user.role in ['admin', 'coach']
+      return user.orgId == orgId && !user.get('suspended', false) && user.role in ['admin', 'coach']
         && (user.role == 'admin' || (firestore.exists(path)
           ? firestore.get(path).data.orgId == orgId && firestore.get(path).data.createdBy == request.auth.uid
           : beforeCreate));

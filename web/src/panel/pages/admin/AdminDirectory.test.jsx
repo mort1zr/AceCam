@@ -4,9 +4,16 @@ import userEvent from '@testing-library/user-event'
 import { getDocFromServer, getDocsFromServer } from 'firebase/firestore'
 import { afterEach, expect, it, vi } from 'vitest'
 import { usagePeriod } from '../../lib/usage.js'
+import { savePlatformOrganization } from '../../lib/services/platformOrganizations.js'
+import { changePlatformMemberRole, changePlatformMemberSuspension } from '../../lib/services/platformMembers.js'
 import AdminDirectory from './AdminDirectory.jsx'
 
 vi.mock('../../lib/firebase.js', () => ({ db: {} }))
+vi.mock('../../context/AuthContext.js', () => ({ useAuth: () => ({ user: { uid: 'platform' } }) }))
+vi.mock('../../lib/services/platformOrganizations.js', () => ({ savePlatformOrganization: vi.fn() }))
+vi.mock('../../lib/services/platformMembers.js', () => ({
+  changePlatformMemberRole: vi.fn(), changePlatformMemberSuspension: vi.fn(),
+}))
 vi.mock('firebase/firestore', () => ({
   collection: (_db, name) => name,
   doc: (_db, ...parts) => parts.join('/'),
@@ -36,13 +43,16 @@ it('muestra miembros, uso mensual y altas a partir de lecturas de Firestore', as
   const cells = table => within(table).getAllByRole('row').slice(1).map(row => Array.from(row.cells, cell => cell.textContent))
 
   expect(getDocFromServer.mock.calls).toEqual([[`orgs/club/usage/${period}`], [`orgs/equipo/usage/${period}`]])
-  expect(cells(organizations)).toEqual([['Club', 'Pro', '0', '0'], ['Equipo', 'Ultra', '2', '7']])
+  expect(cells(organizations)).toEqual([
+    ['Club', 'Pro', '0', '0', 'Activa', 'EditarArchivar'],
+    ['Equipo', 'Ultra', '2', '7', 'Activa', 'EditarArchivar'],
+  ])
   const date = new Intl.DateTimeFormat('es-PE', { dateStyle: 'medium', timeZone: 'UTC' }).format(new Date('2026-11-01'))
   expect(cells(users)).toEqual([
-    ['admin@example.test', 'Equipo', 'Administrador de equipo', '—'],
-    ['coach@example.test', 'Equipo', 'Entrenador', date],
+    ['admin@example.test', 'Equipo', 'Administrador de equipo', '—', 'Activo', 'Cambiar rolSuspender acceso'],
+    ['coach@example.test', 'Equipo', 'Entrenador', date, 'Activo', 'Cambiar rolSuspender acceso'],
   ])
-  expect(screen.queryByRole('button')).toBeNull()
+  expect(screen.getByRole('button', { name: 'Crear organización' })).toBeTruthy()
 })
 
 it('permite reintentar una consulta fallida y muestra un directorio vacío', async () => {
@@ -52,4 +62,72 @@ it('permite reintentar una consulta fallida y muestra un directorio vacío', asy
   await userEvent.setup().click(screen.getByRole('button', { name: 'Reintentar' }))
   expect(await screen.findAllByText('Todavía no hay registros')).toHaveLength(2)
   expect(getDocFromServer).not.toHaveBeenCalled()
+})
+
+it('guarda una nueva organización y exige confirmar el archivo', async () => {
+  let rows = []
+  getDocsFromServer.mockImplementation(async name => ({ docs: name === 'orgs' ? rows : [] }))
+  getDocFromServer.mockResolvedValue(record(usagePeriod(), undefined))
+  savePlatformOrganization.mockImplementation(async (_db, _uid, changes) => {
+    rows = [record('nuevo', { name: 'Club Nuevo', plan: 'pro', ...changes })]
+    return 'nuevo'
+  })
+  const user = userEvent.setup()
+  render(<AdminDirectory />)
+  await screen.findAllByText('Todavía no hay registros')
+  await user.click(screen.getByRole('button', { name: 'Crear organización' }))
+  await user.type(screen.getByLabelText('Nombre'), 'Club Nuevo')
+  await user.selectOptions(screen.getByLabelText('Plan'), 'pro')
+  await user.click(screen.getByRole('button', { name: 'Guardar' }))
+  await user.click(await screen.findByRole('button', { name: 'Archivar Club Nuevo' }))
+  expect(savePlatformOrganization).toHaveBeenCalledTimes(1)
+  await user.click(screen.getByRole('button', { name: 'Archivar', exact: true }))
+  expect(savePlatformOrganization).toHaveBeenLastCalledWith({}, 'platform', { id: 'nuevo', archived: true })
+  expect(await screen.findByRole('button', { name: 'Reactivar Club Nuevo' })).toBeTruthy()
+})
+
+it('confirma el cambio de rol y conserva protegido al propietario', async () => {
+  let memberRole = 'coach'
+  getDocsFromServer.mockImplementation(async name => ({ docs: name === 'orgs'
+    ? [record('equipo', { name: 'Equipo', ownerId: 'owner', plan: 'pro' })]
+    : [
+        record('owner', { email: 'owner@example.test', orgId: 'equipo', role: 'coach' }),
+        record('miembro', { email: 'miembro@example.test', orgId: 'equipo', role: memberRole }),
+      ],
+  }))
+  getDocFromServer.mockResolvedValue(record(usagePeriod(), undefined))
+  changePlatformMemberRole.mockImplementation(async (_db, _uid, change) => { memberRole = change.role })
+  const user = userEvent.setup()
+  render(<AdminDirectory />)
+  await user.click(await screen.findByRole('button', { name: 'Cambiar rol miembro@example.test' }))
+  expect(screen.queryByRole('button', { name: 'Cambiar rol owner@example.test' })).toBeNull()
+  expect(screen.getByRole('button', { name: 'Confirmar' }).disabled).toBe(true)
+  await user.selectOptions(screen.getByLabelText('Nuevo rol'), 'admin')
+  await user.click(screen.getByRole('button', { name: 'Confirmar' }))
+  expect(changePlatformMemberRole).toHaveBeenCalledWith({}, 'platform', { id: 'miembro', expectedRole: 'coach', role: 'admin' })
+  expect(await screen.findByRole('cell', { name: 'Administrador de equipo' })).toBeTruthy()
+})
+
+it('confirma la suspensión y ofrece reactivar el mismo miembro', async () => {
+  let suspended = false
+  getDocsFromServer.mockImplementation(async name => ({ docs: name === 'orgs'
+    ? [record('equipo', { name: 'Equipo', plan: 'pro' })]
+    : [record('miembro', { email: 'miembro@example.test', orgId: 'equipo', role: 'coach', suspended })],
+  }))
+  getDocFromServer.mockResolvedValue(record(usagePeriod(), undefined))
+  changePlatformMemberSuspension.mockImplementation(async (_db, _uid, change) => { suspended = change.suspended })
+  const user = userEvent.setup()
+  render(<AdminDirectory />)
+  await user.click(await screen.findByRole('button', { name: 'Suspender acceso miembro@example.test' }))
+  expect(changePlatformMemberSuspension).not.toHaveBeenCalled()
+  await user.click(screen.getByRole('button', { name: 'Confirmar' }))
+  expect(changePlatformMemberSuspension).toHaveBeenCalledWith({}, 'platform', {
+    id: 'miembro', expectedSuspended: false, suspended: true,
+  })
+  await user.click(await screen.findByRole('button', { name: 'Reactivar acceso miembro@example.test' }))
+  await user.click(screen.getByRole('button', { name: 'Confirmar' }))
+  expect(changePlatformMemberSuspension).toHaveBeenLastCalledWith({}, 'platform', {
+    id: 'miembro', expectedSuspended: true, suspended: false,
+  })
+  expect(await screen.findByRole('cell', { name: 'Activo' })).toBeTruthy()
 })

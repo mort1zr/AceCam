@@ -22,5 +22,7 @@ describe('Identidad de un video de YouTube', () => {
     const input = { sourceType: 'link', url: canonical, playerId: 'p1', playerPosition: 'arriba', opponent: 'Rival', matchDate: '2026-01-01' }
     expect(validateAnalysis(input, { supportsLinks: true })).toHaveProperty('url')
     expect(validateAnalysis(input, { supportsLinks: true, supportsYouTube: true })).toEqual({})
+    expect(validateAnalysis(input, { supportsLinks: true, supportsYouTube: true, youtubeOnly: true })).toEqual({})
+    expect(validateVideoUrl('https://media.example/video.mp4', { supportsYouTube: true, youtubeOnly: true })).toContain('YouTube')
   })
 })

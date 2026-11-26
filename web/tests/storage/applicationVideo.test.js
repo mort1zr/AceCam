@@ -43,7 +43,7 @@ beforeAll(async () => {
   origin = `http://127.0.0.1:${server.address().port}`
   const handle = createApplicationVideoMiddleware({
     store: createApplicationVideoStore({ db, bucket }),
-    probe: async () => ({ durationSeconds: 10, width: 1280, height: 720, fps, extension: 'mp4', contentType: 'video/mp4' }),
+    probe: async () => ({ durationSeconds: 600, width: 1280, height: 720, fps, extension: 'mp4', contentType: 'video/mp4' }),
     authorize: async ({ bearerToken }) => ({
       orgId: { 'coach-video-test': orgId, 'coach-video-otro': 'org-ajena' }[bearerToken],
     }),

@@ -19,7 +19,7 @@ vi.mock('../lib/validateLocalVideo.js', () => ({ validateLocalVideo: vi.fn(async
 
 afterEach(() => {
   cleanup()
-  validateLocalVideo.mockClear()
+  validateLocalVideo.mockReset().mockResolvedValue(null)
 })
 function setup(options) {
   const playersService = createDemoPlayersService(options)
@@ -29,7 +29,8 @@ function setup(options) {
 }
 
 async function fillMatch(user) {
-  await user.selectOptions(await screen.findByLabelText('Jugador *'), 'example-1')
+  const player = await screen.findByRole('option', { name: 'Valeria Torres' })
+  await user.selectOptions(screen.getByLabelText('Jugador *'), player)
   await user.selectOptions(screen.getByLabelText('Posición al inicio del video *'), 'abajo')
   await user.type(screen.getByLabelText('Rival *'), 'Rival de ejemplo')
   await user.type(screen.getByLabelText('Fecha del partido *'), '2026-01-01')
@@ -57,7 +58,7 @@ describe('Analizar video v1', () => {
     render(<Analizar {...setup()} />)
     const input = screen.getByLabelText('Selecciona el video del partido')
     const notice = document.getElementById(input.getAttribute('aria-describedby'))
-    expect(notice.textContent).toContain('MP4 o MOV de hasta 1 minuto')
+    expect(notice.textContent).toContain('MP4 o MOV sin tope de duración')
     expect(notice.textContent).toContain('720p (1280×720) y de 25 a 60 FPS')
     expect(notice.textContent).toContain('1080p a 30 FPS')
     expect(notice.textContent).toContain('con toda la cancha visible y sin cortes')
@@ -109,9 +110,10 @@ describe('Analizar video v1', () => {
       startedAt, analysisStage: 'detecting', analysisFrames: { done: 40, total: 100 },
     })] }))
     expect(screen.getByRole('progressbar').value).toBe(28)
-    expect(screen.getByText(/28 % · Faltan unos 3 min/)).toBeTruthy()
-    expect(screen.getByText('40 de 100 fotogramas en esta etapa')).toBeTruthy()
-    expect(screen.getByText(/Tiempo transcurrido: 1 min/)).toBeTruthy()
+    expect(screen.getByText('28 %')).toBeTruthy()
+    expect(screen.getByText('Faltan unos 3 min')).toBeTruthy()
+    expect(screen.getByText('Fotogramas de la etapa').nextElementSibling.textContent).toBe('40 de 100')
+    expect(screen.getByText('Tiempo transcurrido').nextElementSibling.textContent).toMatch(/^1 min/)
 
     const fpsError = 'El video debe tener entre 25 y 60 FPS. Grábalo o expórtalo dentro de ese rango.'
     act(() => receiveMatches({ docs: [match('a', 'Rival A', 'listo'), match('b', 'Rival B', 'error', fpsError)] }))
@@ -153,6 +155,31 @@ describe('Analizar video v1', () => {
     expect(props.send).toHaveBeenCalledTimes(1)
     expect(validateLocalVideo).toHaveBeenCalledTimes(1)
     expect(screen.getByText('Partido añadido a la cola de demostración. No se subió ni procesó ningún video.')).toBeTruthy()
+  })
+
+  it('mantiene visible el avance real y la cancelación hasta guardar el partido', async () => {
+    const props = setup()
+    let transfer
+    let finish
+    props.send.mockImplementationOnce((_, { onProgress }) => {
+      transfer = onProgress
+      return new Promise(resolve => { finish = resolve })
+    })
+    const user = userEvent.setup()
+    render(<Analizar {...props} />)
+    await fillMatch(user)
+    await user.upload(screen.getByLabelText('Selecciona el video del partido'), new File(['demo'], 'partido.mp4', { type: 'video/mp4' }))
+    await user.click(screen.getByRole('button', { name: /Añadir a la cola/ }))
+    expect(screen.getByRole('progressbar', { name: 'Progreso de carga' }).value).toBe(0)
+    act(() => transfer({ phase: 'uploading', percent: 42 }))
+    expect(screen.getByRole('progressbar', { name: 'Progreso de carga' }).value).toBe(42)
+    expect(screen.getByText('42 %')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Cancelar carga' }).disabled).toBe(false)
+    act(() => transfer({ phase: 'saving', percent: 100 }))
+    expect(screen.getByText('Guardando partido…')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Cancelar carga' }).disabled).toBe(true)
+    await act(async () => finish())
+    expect(screen.queryByRole('progressbar')).toBeNull()
   })
 
   it('rechaza un archivo de baja resolución antes de encolar y permite reemplazarlo', async () => {

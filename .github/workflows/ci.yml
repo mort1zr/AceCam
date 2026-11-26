@@ -625,6 +625,8 @@ jobs:
           VITE_FIREBASE_APPCHECK_SITE_KEY: ${{ vars.VITE_FIREBASE_APPCHECK_SITE_KEY }}
           # PCIT-251: servicio de videos de postulación en Azure. Vacía, el formulario no ofrece adjuntar video.
           VITE_APPLICATION_VIDEO_API_URL: ${{ vars.VITE_APPLICATION_VIDEO_API_URL }}
+          # PCIT-248: con "true", Analizar video ofrece importar desde YouTube con la API de Azure.
+          VITE_AZURE_YOUTUBE_IMPORT_ENABLED: ${{ vars.VITE_AZURE_YOUTUBE_IMPORT_ENABLED }}
           # PCIT-198: el commit queda en <meta name="acecam-version"> del HTML publicado.
           ACECAM_VERSION: ${{ github.sha }}
         run: |

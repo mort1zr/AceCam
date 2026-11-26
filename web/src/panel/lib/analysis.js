@@ -15,7 +15,8 @@ export function validateVideoFile(file, maxBytes) {
   return null
 }
 
-export function validateVideoUrl(value, { supportsYouTube = false } = {}) {
+export function validateVideoUrl(value, { supportsYouTube = false, youtubeOnly = false } = {}) {
+  if (youtubeOnly) return parseYouTubeUrl(value) ? null : 'Usa el enlace HTTPS de un video público de YouTube.'
   if (parseVideoSource(value, { supportsYouTube })) return null
   if (!supportsYouTube && parseYouTubeUrl(value)) return 'La importación de YouTube aún no está disponible. Usa un archivo o un enlace directo MP4/MOV.'
   return supportsYouTube ? 'Usa un enlace HTTPS a un video de YouTube o directo a MP4/MOV, sin credenciales.' : 'Usa un enlace HTTPS directo a un video MP4 o MOV, sin usuario ni contraseña.'
@@ -25,7 +26,7 @@ export function formatBytes(bytes) {
   return `${Number((bytes / (1024 * 1024)).toFixed(1))} MB`
 }
 
-export function validateAnalysis(input, { maxBytes, supportsLinks = false, supportsYouTube = false } = {}) {
+export function validateAnalysis(input, { maxBytes, supportsLinks = false, supportsYouTube = false, youtubeOnly = false } = {}) {
   const errors = {}
   if (typeof input.playerId !== 'string' || !input.playerId || input.playerId.includes('/')) errors.playerId = 'Selecciona un jugador.'
   if (!['arriba', 'abajo'].includes(input.playerPosition)) errors.playerPosition = 'Indica dónde está el jugador al inicio del video.'
@@ -38,7 +39,7 @@ export function validateAnalysis(input, { maxBytes, supportsLinks = false, suppo
     const error = validateVideoFile(input.file, maxBytes)
     if (error) errors.file = error
   } else if (input.sourceType === 'link') {
-    const error = validateVideoUrl(input.url, { supportsYouTube })
+    const error = validateVideoUrl(input.url, { supportsYouTube, youtubeOnly })
     if (!supportsLinks) errors.url = 'La importación por enlace aún no está disponible. Usa un archivo.'
     else if (error) errors.url = error
   } else errors.sourceType = 'Elige un archivo o un enlace.'
@@ -73,6 +74,7 @@ export function analysisErrorMessage(error) {
   if (error?.name === 'AbortError') return 'Carga cancelada antes de crear el partido. Puedes volver a intentarlo.'
   if (Object.hasOwn(VIDEO_IMPORT_MESSAGES, error?.code)) return VIDEO_IMPORT_MESSAGES[error.code]
   if (error?.code === 'analysis/player') return 'El jugador ya no está disponible en tu organización. Actualiza la lista.'
+  if (error?.code === 'analysis/archived') return 'La organización está archivada. Pide a un administrador de plataforma que la reactive.'
   if (error?.code === 'analysis/validation') return 'Revisa los datos y el video antes de continuar.'
   if (error?.code === 'analysis/video-path') return 'La ruta del video no corresponde a este partido. Vuelve a intentar la carga.'
   if (error?.code === 'analysis/limit') return error.limit

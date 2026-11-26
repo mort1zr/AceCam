@@ -37,7 +37,7 @@ export async function validateLocalVideo(file, signal) {
       if (![videoWidth, videoHeight, duration].every((value) => Number.isFinite(value) && value > 0)) {
         finish(UNREADABLE)
       } else {
-        finish(videoRequirementsError({ width: videoWidth, height: videoHeight, durationSeconds: duration }))
+        finish(videoRequirementsError({ width: videoWidth, height: videoHeight }))
       }
     }
     video.onerror = () => finish(UNREADABLE)

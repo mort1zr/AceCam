@@ -4,7 +4,7 @@
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { assertFails, assertSucceeds, initializeTestEnvironment } from '@firebase/rules-unit-testing'
-import { doc, setDoc } from 'firebase/firestore'
+import { doc, setDoc, updateDoc } from 'firebase/firestore'
 import { getBytes, ref, uploadBytes } from 'firebase/storage'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { createVideoUploadService } from '../../src/panel/lib/videoUpload.js'
@@ -47,6 +47,19 @@ beforeEach(async () => {
 const coachStorage = () => env.authenticatedContext(COACH, { email: 'coach@acecam.test' }).storage()
 
 describe('reglas de Storage', () => {
+  it('bloquea leer y subir videos durante la suspensión', async () => {
+    const storage = coachStorage()
+    const video = ref(storage, path(ORG))
+    await assertSucceeds(uploadBytes(video, bytes(), mp4()))
+    const setSuspended = suspended => env.withSecurityRulesDisabled(context =>
+      updateDoc(doc(context.firestore(), 'users', COACH), { suspended }))
+    await setSuspended(true)
+    await assertFails(getBytes(video))
+    await assertFails(uploadBytes(video, bytes(), mp4()))
+    await setSuspended(false)
+    await assertSucceeds(getBytes(video))
+  })
+
   it('el permiso de plataforma no da acceso a videos de un equipo', async () => {
     const uid = 'admin-plataforma'
     await env.withSecurityRulesDisabled(context => setDoc(doc(context.firestore(), 'platformAdmins', uid), {}))

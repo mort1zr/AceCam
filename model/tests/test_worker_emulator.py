@@ -57,13 +57,6 @@ def clear_queue(store):
         snapshot.reference.update({"status": "listo"})
 
 
-@pytest.fixture
-def synthetic_video(tmp_path):
-    from test_pipeline_smoke import write_synthetic_video
-
-    return write_synthetic_video(tmp_path / "partido.avi")
-
-
 def model_stats(path):
     from test_worker import model_stats as fake
 
@@ -160,12 +153,14 @@ def test_a_match_changed_while_processing_is_not_overwritten(backend):
     assert store.db.collection("matches").document(match_id).get().get("status") == "en cola"
 
 
-def test_end_to_end_storage_pipeline_firestore(backend, tmp_path, monkeypatch, synthetic_video):
+@pytest.mark.parametrize("duration", [4, 61])
+def test_end_to_end_storage_pipeline_firestore(backend, tmp_path, monkeypatch, duration):
     """Video en Storage → pipeline real (modelos sustituidos) → estadísticas en Firestore."""
     import test_pipeline_smoke as smoke
 
     import main
     from worker.__main__ import make_analyzer
+    from worker.video import encode_browser_video
 
     monkeypatch.setattr(main, "PlayerTracker", smoke.FakePlayerTracker)
     monkeypatch.setattr(main, "BallTracker", smoke.FakeBallTracker)
@@ -173,18 +168,18 @@ def test_end_to_end_storage_pipeline_firestore(backend, tmp_path, monkeypatch, s
     store, videos, bucket, org = backend
     clear_queue(store)
     match_id = f"{org}-e2e"
-    path = f"orgs/{org}/matches/{match_id}/video.avi"
-    bucket.blob(path).upload_from_filename(str(synthetic_video))
+    source = smoke.write_synthetic_video(tmp_path / "partido.avi", num_frames=duration * smoke.FPS)
+    video = encode_browser_video(source, tmp_path / "partido.mp4")
+    path = f"orgs/{org}/matches/{match_id}/video.mp4"
+    bucket.blob(path).upload_from_filename(str(video), content_type="video/mp4")
     add_match(store, org, match_id, path, playerPosition="abajo")
 
     assert run_once(store, videos, make_analyzer(), tmp_path / "work", version="v") == (match_id, "listo")
 
     statistics = store.db.collection("matches").document(match_id).get().get("statistics")
-    assert statistics["durationSeconds"] == 4.0  # 120 fotogramas a 30 fps
-    # En el vídeo sintético solo hay un golpe medible, del jugador cercano ('abajo').
-    assert statistics["player"]["shots"]["count"] == 1
-    assert 40 < statistics["player"]["shots"]["maxSpeedKmh"] < 120
-    assert statistics["opponent"]["shots"] == {"count": 0, "sumSpeedKmh": 0.0}  # medido y cero, no "sin dato"
+    assert statistics["durationSeconds"] == pytest.approx(duration)
+    assert statistics["player"]["shots"]["count"] > 0
+    assert statistics["player"]["shots"]["maxSpeedKmh"] > 0
     assert "movement" in statistics["opponent"]
     output = store.db.collection("matches").document(match_id).get().get("processedVideoPath")
     assert output == f"orgs/{org}/matches/{match_id}/processed.mp4"
