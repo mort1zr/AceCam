@@ -2,7 +2,7 @@ export default function Marcador({ value }) {
   if (!value) return '—'
   const sets = String(value).trim().split(/\s+/)
   return (
-    <span className="players-marcador" aria-label={`Resultado ${value}`}>
+    <span className="players-marcador" role="img" aria-label={`Resultado ${value}`}>
       {sets.map((set, index) => {
         const [juegos, desempate] = set.split(/[()]/)
         return (

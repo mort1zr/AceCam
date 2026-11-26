@@ -40,6 +40,11 @@ on:
   schedule:
     - cron: "17 13 * * 1" # lunes 08:17 en Lima
   workflow_dispatch:
+    inputs:
+      probar_vigilancia:
+        description: "Forzar un fallo en la vigilancia de producción para comprobar que abre el issue (PCIT-218)"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -53,7 +58,9 @@ env:
   IMAGE: ghcr.io/mort1zr/acecam-videos-api
   APP_NAME: acecam-videos-api
   WORKER_IMAGE: ghcr.io/mort1zr/acecam-worker
-  WORKER_JOB: acecam-worker
+  # PCIT-251: servicio de videos de postulación (formulario público → Azure Blob privado).
+  APPLICATIONS_IMAGE: ghcr.io/mort1zr/acecam-application-video
+  APPLICATIONS_APP: acecam-application-video
 
 jobs:
   # ------------------------------------------------------------------ qué cambió
@@ -94,6 +101,8 @@ jobs:
               - '.github/workflows/ci.yml'
             azure:
               - 'web/server/azure-videos/**'
+              - 'web/server/application-video/**'
+              - 'web/server/video-import/**'
               - 'model/**'
               - '.github/workflows/ci.yml'
 
@@ -335,23 +344,139 @@ jobs:
         with:
           sarif_file: reports/dependency-check-report.sarif
 
+  # PCIT-214: ZAP Baseline (DAST) contra la vista previa de cada PR y contra producción en main.
+  # .zap/rules.tsv decide qué bloquea: un hallazgo FAIL hace fallar el job (y la PR); los
+  # avisos (WARN) no, gracias a -I. El informe queda como artefacto y su resumen en el run.
   owasp-zap-baseline:
     name: "OWASP: ZAP Baseline (DAST)"
     needs: deploy
-    if: github.ref == 'refs/heads/main' && needs.deploy.result == 'success'
+    # always(): sin él, un job omitido más atrás en la cadena (Dependency Review fuera de una
+    # PR) hace que GitHub salte también este, aunque deploy haya salido bien.
+    if: |
+      always() && needs.deploy.result == 'success'
+      && (github.ref == 'refs/heads/main' || (github.event_name == 'pull_request' && needs.deploy.outputs.preview_url != ''))
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
       contents: read
-      issues: write
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: .zap
       - name: ZAP Baseline Scan
         uses: zaproxy/action-baseline@de8ad967d3548d44ef623df22cf95c3b0baf8b25 # v0.15.0
         with:
-          target: "https://acecam-e93a2.web.app"
-          cmd_options: "-a"
+          target: ${{ github.event_name == 'pull_request' && needs.deploy.outputs.preview_url || 'https://acecam-e93a2.web.app' }}
+          rules_file_name: .zap/rules.tsv
+          cmd_options: "-a -I"
           allow_issue_writing: false
-          fail_action: false
+          fail_action: true
+      - name: Resumen de ZAP
+        if: always()
+        run: |
+          {
+            echo "### OWASP ZAP Baseline"
+            echo ""
+            if [ -f report_md.md ]; then cat report_md.md; else echo "No se generó el informe."; fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # PCIT-218: vigilancia semanal de producción. Cada lunes (y a mano, con probar_vigilancia,
+  # para comprobar el aviso) revisa las cabeceras de seguridad y pasa ZAP Baseline sobre la
+  # web publicada, aunque nadie haya subido código. Si algo falla, abre un issue con el
+  # informe, o comenta en el que siga abierto, para que el equipo se entere.
+  vigilancia-produccion:
+    name: "Vigilancia semanal de producción"
+    if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.probar_vigilancia)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      issues: write # abrir o comentar el issue de aviso
+    env:
+      PRODUCCION: https://acecam-e93a2.web.app/
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+      - name: Cabeceras de seguridad
+        id: headers
+        continue-on-error: true
+        working-directory: web
+        run: node scripts/checkHeaders.mjs "$PRODUCCION" "${PRODUCCION}privacidad" 2>&1 | tee "$RUNNER_TEMP/cabeceras.txt"; exit "${PIPESTATUS[0]}"
+      - name: ZAP Baseline
+        id: zap
+        continue-on-error: true
+        uses: zaproxy/action-baseline@de8ad967d3548d44ef623df22cf95c3b0baf8b25 # v0.15.0
+        with:
+          target: https://acecam-e93a2.web.app
+          rules_file_name: .zap/rules.tsv
+          cmd_options: "-a -I"
+          allow_issue_writing: false
+          fail_action: true
+          artifact_name: zap_vigilancia
+      - name: Fallo de prueba
+        id: prueba
+        if: github.event_name == 'workflow_dispatch' && inputs.probar_vigilancia
+        continue-on-error: true
+        run: |
+          echo "Fallo forzado a mano para comprobar el aviso (probar_vigilancia)."
+          exit 1
+      - name: Abrir o actualizar el issue de aviso
+        if: steps.headers.outcome == 'failure' || steps.zap.outcome == 'failure' || steps.prueba.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEADERS: ${{ steps.headers.outcome }}
+          ZAP: ${{ steps.zap.outcome }}
+          PRUEBA: ${{ steps.prueba.outcome }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          label="vigilancia-seguridad"
+          gh label create "$label" --color B60205 --description "Aviso de la vigilancia semanal (PCIT-218)" 2>/dev/null || true
+          {
+            echo "La vigilancia de producción encontró un problema en ${PRODUCCION}."
+            echo ""
+            echo "| Control | Resultado |"
+            echo "| --- | --- |"
+            echo "| Cabeceras de seguridad | $HEADERS |"
+            echo "| ZAP Baseline | $ZAP |"
+            if [ "$PRUEBA" = "failure" ]; then echo "| Fallo de prueba (probar_vigilancia) | forzado |"; fi
+            echo ""
+            echo "Ejecución: $RUN_URL (el informe de ZAP está en el artefacto \`zap_vigilancia\`)."
+            echo ""
+            echo "Cabeceras:"
+            echo '```'
+            cat "$RUNNER_TEMP/cabeceras.txt" 2>/dev/null || echo "(sin salida)"
+            echo '```'
+            echo ""
+            echo "Qué hacer: docs/devsecops.md, sección 4."
+          } > "$RUNNER_TEMP/aviso.md"
+          open=$(gh issue list --label "$label" --state open --json number --jq '.[0].number' --repo "$GITHUB_REPOSITORY")
+          if [ -n "$open" ]; then
+            gh issue comment "$open" --body-file "$RUNNER_TEMP/aviso.md" --repo "$GITHUB_REPOSITORY"
+          else
+            gh issue create --title "Vigilancia semanal: falla un control de seguridad en producción" \
+              --label "$label" --body-file "$RUNNER_TEMP/aviso.md" --repo "$GITHUB_REPOSITORY"
+          fi
+      - name: Resultado
+        if: always()
+        env:
+          HEADERS: ${{ steps.headers.outcome }}
+          ZAP: ${{ steps.zap.outcome }}
+          PRUEBA: ${{ steps.prueba.outcome }}
+        run: |
+          {
+            echo "### Vigilancia de producción"
+            echo ""
+            echo "| Control | Resultado |"
+            echo "| --- | --- |"
+            echo "| Cabeceras de seguridad | $HEADERS |"
+            echo "| ZAP Baseline | $ZAP |"
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$HEADERS" = "failure" ] || [ "$ZAP" = "failure" ] || [ "$PRUEBA" = "failure" ]; then exit 1; fi
 
   # -------------------------------------------------------------------------  SAST
 
@@ -417,13 +542,39 @@ jobs:
         with:
           sarif_file: results.sarif
 
+  # ---------------------------------------------------------  PUERTA DE SEGURIDAD
+  # PCIT-213: ningún despliegue (Firebase ni Azure) sale si falla un control de seguridad.
+  # Espera a secretos, dependencias, CodeQL y actionlint; "skipped" cuenta como superado
+  # (por ejemplo, Dependency Review fuera de una PR). Las imágenes de Azure se construyen en
+  # paralelo, pero solo se despliegan si esta puerta pasa.
+  seguridad:
+    name: "Puerta de seguridad"
+    needs: [lint-workflow, secretos, dependencias-python, dependencias-web, revision-dependencias, codeql]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - name: Comprobar los controles
+        env:
+          RESULTADOS: ${{ toJSON(needs) }}
+        run: |
+          echo "$RESULTADOS" | jq -r 'to_entries[] | "\(.key): \(.value.result)"'
+          fallos=$(echo "$RESULTADOS" | jq -r '[to_entries[] | select(.value.result != "success" and .value.result != "skipped") | .key] | join(", ")')
+          if [ -n "$fallos" ]; then
+            echo "::error::No se despliega: fallaron o se cancelaron estos controles de seguridad: $fallos"
+            exit 1
+          fi
+          echo "Todos los controles de seguridad pasaron."
+
   # ------------------------------------------------------------------------  DEPLOY
 
   deploy:
     name: "Deploy: Firebase Hosting"
-    needs: [web-tests, web-reglas]
+    needs: [web-tests, web-reglas, seguridad]
     if: |
       always() && needs.web-tests.result == 'success' && needs.web-reglas.result == 'success'
+      && needs.seguridad.result == 'success'
       && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -432,6 +583,9 @@ jobs:
       contents: read
       checks: write
       pull-requests: write
+    # PCIT-214: ZAP escanea la vista previa de la PR con esta URL.
+    outputs:
+      preview_url: ${{ steps.hosting.outputs.details_url }}
     steps:
       - name: Comprobar configuración
         id: config
@@ -467,6 +621,11 @@ jobs:
           VITE_USE_FIREBASE_EMULATORS: "false"
           # PCIT-225: con esta variable los videos se suben a Azure (PCIT-222); vacía, a Firebase Storage.
           VITE_VIDEO_API_URL: ${{ vars.VITE_VIDEO_API_URL }}
+          # PCIT-219: clave de sitio de reCAPTCHA v3 para App Check (pública). Vacía, App Check no se activa.
+          VITE_FIREBASE_APPCHECK_SITE_KEY: ${{ vars.VITE_FIREBASE_APPCHECK_SITE_KEY }}
+          # PCIT-251: servicio de videos de postulación en Azure. Vacía, el formulario no ofrece adjuntar video.
+          VITE_APPLICATION_VIDEO_API_URL: ${{ vars.VITE_APPLICATION_VIDEO_API_URL }}
+          # PCIT-248: con "true", Analizar video ofrece importar desde YouTube con la API de Azure.
           VITE_AZURE_YOUTUBE_IMPORT_ENABLED: ${{ vars.VITE_AZURE_YOUTUBE_IMPORT_ENABLED }}
           # PCIT-198: el commit queda en <meta name="acecam-version"> del HTML publicado.
           ACECAM_VERSION: ${{ github.sha }}
@@ -518,6 +677,18 @@ jobs:
         env:
           EXPECTED_VERSION: ${{ github.sha }}
         run: node scripts/checkDeploy.mjs "https://${FIREBASE_PROJECT}.web.app/" "$EXPECTED_VERSION"
+
+      # PCIT-215: la web publicada envía las cabeceras de seguridad de firebase.json con su
+      # valor mínimo (CSP, HSTS de 1 año, nosniff, DENY, Referrer-Policy, Permissions-Policy
+      # y COOP). En una PR, sobre la vista previa; en main, sobre producción. Si una falta o
+      # se debilita, el despliegue falla e indica cuál.
+      - name: Comprobar las cabeceras de seguridad
+        id: headers
+        if: steps.config.outputs.ok == 'true' && steps.hosting.outcome == 'success'
+        working-directory: web
+        env:
+          URL: ${{ github.event_name == 'pull_request' && steps.hosting.outputs.details_url || format('https://{0}.web.app/', env.FIREBASE_PROJECT) }}
+        run: node scripts/checkHeaders.mjs "$URL" "${URL%/}/privacidad"
 
       # PCIT-200: tabla con lo que se publicó en la página del run, también si algo falló.
       - name: Resumen del despliegue
@@ -579,8 +750,8 @@ jobs:
 
   desplegar:
     name: "Azure: desplegar la API de videos"
-    needs: imagen
-    if: github.event_name != 'pull_request'
+    needs: [imagen, seguridad]
+    if: always() && github.event_name != 'pull_request' && needs.imagen.result == 'success' && needs.seguridad.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     environment: production
@@ -645,7 +816,7 @@ jobs:
         env:
           URL: ${{ steps.deploy.outputs.url }}
         run: |
-          for attempt in 1 2 3 4 5 6 7 8 9 10; do
+          for _ in 1 2 3 4 5 6 7 8 9 10; do
             if [ "$(curl -s --max-time 15 "$URL/healthz")" = "ok" ]; then
               status=$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'Origin: https://acecam-e93a2.web.app' "$URL/api/videos/sign")
               [ "$status" = "401" ] || { echo "::error::Sin sesión debería responder 401 y respondió $status."; exit 1; }
@@ -667,6 +838,148 @@ jobs:
             echo "| Paso | Resultado |"
             echo "| --- | --- |"
             echo "| Imagen | \`$IMAGE:${GITHUB_SHA:0:12}\` |"
+            echo "| Despliegue | $OUTCOME |"
+            echo "| URL | ${URL:-sin URL} |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # ---------- Videos de postulación (PCIT-251) ----------
+  imagen-postulaciones:
+    name: "Azure: construir imagen de videos de postulación"
+    needs: cambios
+    if: needs.cambios.outputs.azure == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      packages: write # publicar la imagen en GitHub Packages (solo en main)
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # El contexto es web/: la imagen copia la validación compartida con la web.
+      - name: Construir la imagen
+        working-directory: web
+        run: |
+          docker build --pull -f server/application-video/Dockerfile -t "$APPLICATIONS_IMAGE:$GITHUB_SHA" \
+            --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" \
+            --label "org.opencontainers.image.description=Videos de postulación de AceCam (PCIT-251)" .
+
+      # Sin configuración debe negarse a arrancar, y ffprobe tiene que estar disponible.
+      - name: Comprobar la imagen
+        run: |
+          if docker run --rm "$APPLICATIONS_IMAGE:$GITHUB_SHA" > arranque.log 2>&1; then
+            echo "::error::El servicio arrancó sin configuración."; exit 1
+          fi
+          grep -q "Falta la variable de entorno" arranque.log || { cat arranque.log; exit 1; }
+          docker run --rm --entrypoint /usr/bin/ffprobe "$APPLICATIONS_IMAGE:$GITHUB_SHA" -version | head -1
+
+      - name: Publicar en GitHub Packages
+        if: github.event_name != 'pull_request'
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ACTOR: ${{ github.actor }}
+        run: |
+          echo "$TOKEN" | docker login ghcr.io -u "$ACTOR" --password-stdin
+          docker push "$APPLICATIONS_IMAGE:$GITHUB_SHA"
+          docker logout ghcr.io
+
+  desplegar-postulaciones:
+    name: "Azure: desplegar videos de postulación"
+    needs: [imagen-postulaciones, seguridad]
+    if: always() && github.event_name != 'pull_request' && needs.imagen-postulaciones.result == 'success' && needs.seguridad.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: production
+    permissions:
+      contents: read
+      id-token: write # inicio de sesión en Azure sin contraseña (OIDC)
+    steps:
+      # Reutiliza la identidad de Blob de la API y la cuenta de servicio del worker, que ya
+      # puede actualizar Firestore: en Firestore los permisos son de todo el proyecto, así que
+      # una cuenta aparte tendría el mismo rol (ver docs/PCIT-251-postulaciones-en-azure.md).
+      - name: Comprobar configuración
+        id: config
+        env:
+          CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          IDENTITY: ${{ vars.AZURE_VIDEOS_API_IDENTITY_ID }}
+          FIREBASE_SA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_WORKER }}
+        run: |
+          if [ -z "$CLIENT_ID" ] || [ -z "$IDENTITY" ] || [ -z "$FIREBASE_SA" ]; then
+            echo "::warning::Faltan variables AZURE_* o el secreto FIREBASE_SERVICE_ACCOUNT_WORKER: no se despliega el servicio de postulaciones."
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Iniciar sesión en Azure
+        if: steps.config.outputs.ok == 'true'
+        uses: azure/login@7184910d9eb2b1c5e48f7073824a90609bb9b6d6 # v2.3.1
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Desplegar en Azure Container Apps
+        id: deploy
+        if: steps.config.outputs.ok == 'true'
+        env:
+          RG: ${{ vars.AZURE_RESOURCE_GROUP }}
+          ENVIRONMENT: ${{ vars.AZURE_CONTAINERAPPS_ENV }}
+          STORAGE: ${{ vars.AZURE_STORAGE_ACCOUNT }}
+          IDENTITY: ${{ vars.AZURE_VIDEOS_API_IDENTITY_ID }}
+          IDENTITY_CLIENT_ID: ${{ vars.AZURE_VIDEOS_API_IDENTITY_CLIENT_ID }}
+          FIREBASE_SA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_WORKER }}
+        run: |
+          az extension add --name containerapp --upgrade --only-show-errors
+          DOMAIN=$(az containerapp env show -n "$ENVIRONMENT" -g "$RG" --query properties.defaultDomain -o tsv)
+          ENV_VARS=(
+            "AZURE_STORAGE_ACCOUNT=$STORAGE" "AZURE_STORAGE_CONTAINER=videos" "AZURE_CLIENT_ID=$IDENTITY_CLIENT_ID"
+            "FIREBASE_PROJECT_ID=acecam-e93a2" "ALLOWED_ORIGIN=https://acecam-e93a2.web.app"
+            "SERVICE_HOST=$APPLICATIONS_APP.$DOMAIN" "FIREBASE_SERVICE_ACCOUNT=secretref:firebase-sa"
+          )
+          if az containerapp show -n "$APPLICATIONS_APP" -g "$RG" -o none 2>/dev/null; then
+            az containerapp secret set -n "$APPLICATIONS_APP" -g "$RG" --secrets "firebase-sa=$FIREBASE_SA" -o none
+            az containerapp update -n "$APPLICATIONS_APP" -g "$RG" --image "$APPLICATIONS_IMAGE:$GITHUB_SHA" --set-env-vars "${ENV_VARS[@]}" -o none
+          else
+            # 0,5 vCPU y 1 GiB: el video se guarda en disco temporal mientras ffprobe lo revisa.
+            az containerapp create -n "$APPLICATIONS_APP" -g "$RG" --environment "$ENVIRONMENT" \
+              --image "$APPLICATIONS_IMAGE:$GITHUB_SHA" --ingress external --target-port 8080 \
+              --min-replicas 0 --max-replicas 1 --cpu 0.5 --memory 1Gi \
+              --user-assigned "$IDENTITY" --secrets "firebase-sa=$FIREBASE_SA" \
+              --env-vars "${ENV_VARS[@]}" --tags proyecto=acecam -o none
+          fi
+          echo "url=https://$APPLICATIONS_APP.$DOMAIN" >> "$GITHUB_OUTPUT"
+
+      - name: Comprobar el servicio publicado
+        if: steps.config.outputs.ok == 'true'
+        env:
+          URL: ${{ steps.deploy.outputs.url }}
+        run: |
+          for _ in 1 2 3 4 5 6 7 8 9 10; do
+            if [ "$(curl -s --max-time 15 "$URL/healthz")" = "ok" ]; then
+              # Un envío desde otro origen se rechaza sin tocar nada.
+              status=$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'Origin: https://otro-sitio.test' \
+                "$URL/api/application-video/org/AAAAAAAAAAAAAAAAAAAA/BBBBBBBBBBBBBBBBBBBB")
+              [ "$status" = "403" ] || { echo "::error::Otro origen debería recibir 403 y recibió $status."; exit 1; }
+              echo "Servicio de postulaciones en línea: $URL"; exit 0
+            fi
+            sleep 15
+          done
+          echo "::error::El servicio no respondió en $URL/healthz."; exit 1
+
+      - name: Resumen del despliegue
+        if: always() && steps.config.outputs.ok == 'true'
+        env:
+          URL: ${{ steps.deploy.outputs.url }}
+          OUTCOME: ${{ steps.deploy.outcome }}
+        run: |
+          {
+            echo "### Videos de postulación (Azure)"
+            echo ""
+            echo "| Paso | Resultado |"
+            echo "| --- | --- |"
+            echo "| Imagen | \`$APPLICATIONS_IMAGE:${GITHUB_SHA:0:12}\` |"
             echo "| Despliegue | $OUTCOME |"
             echo "| URL | ${URL:-sin URL} |"
           } >> "$GITHUB_STEP_SUMMARY"
@@ -710,83 +1023,30 @@ jobs:
           docker push "$WORKER_IMAGE:$GITHUB_SHA"
           docker logout ghcr.io
 
-  desplegar-worker:
-    name: "Azure: desplegar el worker"
-    needs: imagen-worker
-    if: github.event_name != 'pull_request'
+  # PCIT-247: Azure for Students no admite Jobs (los entornos son Express), así que el worker
+  # corre en GitHub Actions (.github/workflows/worker.yml). Aquí solo se publica la imagen como
+  # "latest" cuando pasa la puerta de seguridad: el workflow del worker usa esa etiqueta.
+  publicar-worker:
+    name: "Worker: publicar la imagen para el workflow del worker"
+    needs: [imagen-worker, seguridad]
+    if: always() && github.event_name != 'pull_request' && needs.imagen-worker.result == 'success' && needs.seguridad.result == 'success'
     runs-on: ubuntu-latest
-    timeout-minutes: 20
-    environment: production
+    timeout-minutes: 10
     permissions:
       contents: read
-      id-token: write # inicio de sesión en Azure sin contraseña (OIDC)
+      packages: write # mover la etiqueta latest en GitHub Packages
     steps:
-      - name: Comprobar configuración
-        id: config
+      - name: Etiquetar como latest
         env:
-          CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
-          IDENTITY: ${{ vars.AZURE_VIDEOS_API_IDENTITY_ID }}
-          FIREBASE_SA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_WORKER }}
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ACTOR: ${{ github.actor }}
         run: |
-          if [ -z "$CLIENT_ID" ] || [ -z "$IDENTITY" ] || [ -z "$FIREBASE_SA" ]; then
-            echo "::warning::Falta el secreto FIREBASE_SERVICE_ACCOUNT_WORKER o variables AZURE_*: no se despliega el worker (ver docs/PCIT-222-videos-en-azure.md)."
-            echo "ok=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "ok=true" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Iniciar sesión en Azure
-        if: steps.config.outputs.ok == 'true'
-        uses: azure/login@7184910d9eb2b1c5e48f7073824a90609bb9b6d6 # v2.3.1
-        with:
-          client-id: ${{ vars.AZURE_CLIENT_ID }}
-          tenant-id: ${{ vars.AZURE_TENANT_ID }}
-          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
-
-      # Tarea programada cada 5 minutos: con la cola vacía termina en segundos;
-      # con un partido, lo analiza (unos 30 min en CPU, máximo 1 h).
-      - name: Desplegar el worker como tarea programada
-        id: deploy
-        if: steps.config.outputs.ok == 'true'
-        env:
-          RG: ${{ vars.AZURE_RESOURCE_GROUP }}
-          ENVIRONMENT: ${{ vars.AZURE_CONTAINERAPPS_ENV }}
-          STORAGE: ${{ vars.AZURE_STORAGE_ACCOUNT }}
-          IDENTITY: ${{ vars.AZURE_VIDEOS_API_IDENTITY_ID }}
-          IDENTITY_CLIENT_ID: ${{ vars.AZURE_VIDEOS_API_IDENTITY_CLIENT_ID }}
-          FIREBASE_SA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_WORKER }}
-        run: |
-          az extension add --name containerapp --upgrade --only-show-errors
-          ENV_VARS=(
-            "AZURE_STORAGE_ACCOUNT=$STORAGE" "AZURE_STORAGE_CONTAINER=videos" "AZURE_CLIENT_ID=$IDENTITY_CLIENT_ID"
-            "FIREBASE_PROJECT_ID=acecam-e93a2" "FIREBASE_SERVICE_ACCOUNT=secretref:firebase-sa"
-          )
-          if az containerapp job show -n "$WORKER_JOB" -g "$RG" -o none 2>/dev/null; then
-            az containerapp job secret set -n "$WORKER_JOB" -g "$RG" --secrets "firebase-sa=$FIREBASE_SA" -o none
-            az containerapp job update -n "$WORKER_JOB" -g "$RG" --image "$WORKER_IMAGE:$GITHUB_SHA" \
-              --set-env-vars "${ENV_VARS[@]}" -o none
-          else
-            az containerapp job create -n "$WORKER_JOB" -g "$RG" --environment "$ENVIRONMENT" \
-              --trigger-type Schedule --cron-expression "*/5 * * * *" \
-              --replica-timeout 3600 --replica-retry-limit 0 --parallelism 1 --replica-completion-count 1 \
-              --image "$WORKER_IMAGE:$GITHUB_SHA" --cpu 2 --memory 4Gi \
-              --mi-user-assigned "$IDENTITY" --secrets "firebase-sa=$FIREBASE_SA" \
-              --env-vars "${ENV_VARS[@]}" --tags proyecto=acecam -o none
-          fi
-          az containerapp job show -n "$WORKER_JOB" -g "$RG" \
-            --query "{estado:properties.provisioningState, imagen:properties.template.containers[0].image}" -o table
-
-      - name: Resumen del worker
-        if: always() && steps.config.outputs.ok == 'true'
-        env:
-          OUTCOME: ${{ steps.deploy.outcome }}
-        run: |
+          echo "$TOKEN" | docker login ghcr.io -u "$ACTOR" --password-stdin
+          # Copia la etiqueta en el registro, sin descargar la imagen.
+          docker buildx imagetools create -t "$WORKER_IMAGE:latest" "$WORKER_IMAGE:$GITHUB_SHA"
+          docker logout ghcr.io
           {
-            echo "### Worker del modelo (Azure)"
+            echo "### Worker del modelo"
             echo ""
-            echo "| Paso | Resultado |"
-            echo "| --- | --- |"
-            echo "| Imagen | \`$WORKER_IMAGE:${GITHUB_SHA:0:12}\` |"
-            echo "| Tarea programada \`$WORKER_JOB\` | $OUTCOME |"
-            echo "| Frecuencia | cada 5 minutos, 2 vCPU y 4 GiB, máximo 1 h |"
+            echo "\`$WORKER_IMAGE:latest\` apunta a \`${GITHUB_SHA:0:12}\`. Lo usa el workflow \"Worker del modelo\" cada 10 minutos."
           } >> "$GITHUB_STEP_SUMMARY"

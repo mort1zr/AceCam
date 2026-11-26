@@ -1,0 +1,114 @@
+name: Worker del modelo
+
+# PCIT-247 y PCIT-226: el worker del modelo corre en GitHub Actions.
+#
+# Azure for Students solo admite entornos de Container Apps "Express", que no admiten Jobs
+# (ExpressEnvironmentResourceNotSupported), y una Container App siempre encendida gastaría el
+# crédito en semanas. Como el repositorio es público, los runners de GitHub son gratis
+# (4 vCPU y 16 GB). Los videos siguen en Azure Blob y el estado en Firestore: aquí solo se procesa.
+#
+# Cada 10 minutos mira si hay partidos "en cola". Si hay, descarga la imagen del worker que
+# publicó el pipeline (ghcr.io/mort1zr/acecam-worker:latest, solo tras la puerta de seguridad)
+# y procesa uno. Ver docs/devsecops.md §5.
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Un solo worker a la vez; una ejecución en espera no cancela la que está procesando.
+concurrency:
+  group: worker-modelo
+  cancel-in-progress: false
+
+jobs:
+  procesar:
+    name: "Procesar un partido en cola"
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    # 600 s de video a unos 22 min por minuto (4 vCPU) más la carga del modelo, con margen.
+    timeout-minutes: 300
+    environment: production
+    permissions:
+      contents: read
+      id-token: write # token OIDC para leer y escribir los videos en Azure Blob, sin claves
+      packages: read  # descargar la imagen del worker de GitHub Packages
+    env:
+      WORKER_IMAGE: ghcr.io/mort1zr/acecam-worker:latest
+      # Tope de duración del video (PCIT-228): en estos runners entra un video de hasta 10 min.
+      MAX_SECONDS: "600"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: model/scripts/queued_matches.py
+          sparse-checkout-cone-mode: false
+
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.11"
+
+      - name: ¿Hay partidos en cola?
+        id: cola
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_WORKER }}
+        run: |
+          pip install --quiet --disable-pip-version-check google-cloud-firestore==2.33.0
+          python model/scripts/queued_matches.py
+
+      # El SDK de Azure del contenedor lee este archivo (WorkloadIdentityCredential). El token de
+      # GitHub dura poco, así que se renueva cada 4 minutos mientras el worker trabaja.
+      - name: Credencial de Azure para el contenedor
+        if: steps.cola.outputs.hay == 'true'
+        run: |
+          token_file="$RUNNER_TEMP/azure-federated-token"
+          refresh() {
+            curl -sSf -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+              "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=api://AzureADTokenExchange" | jq -r .value > "$token_file.tmp"
+            cat "$token_file.tmp" > "$token_file" && rm -f "$token_file.tmp"
+          }
+          refresh
+          chmod 644 "$token_file" # el contenedor corre con otro usuario (uid 10001)
+          nohup bash -c "$(declare -f refresh); token_file='$token_file'; while sleep 240; do refresh; done" >/dev/null 2>&1 &
+          echo "token_file=$token_file" >> "$GITHUB_ENV"
+
+      - name: Procesar
+        if: steps.cola.outputs.hay == 'true'
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ACTOR: ${{ github.actor }}
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_WORKER }}
+          AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          AZURE_STORAGE_ACCOUNT: ${{ vars.AZURE_STORAGE_ACCOUNT }}
+        run: |
+          echo "$TOKEN" | docker login ghcr.io -u "$ACTOR" --password-stdin
+          docker pull --quiet "$WORKER_IMAGE"
+          docker logout ghcr.io
+          docker run --rm \
+            -v "$token_file:/var/run/azure/token:ro" \
+            -e AZURE_FEDERATED_TOKEN_FILE=/var/run/azure/token \
+            -e AZURE_CLIENT_ID -e AZURE_TENANT_ID -e AZURE_STORAGE_ACCOUNT \
+            -e AZURE_STORAGE_CONTAINER=videos -e FIREBASE_PROJECT_ID=acecam-e93a2 \
+            -e FIREBASE_SERVICE_ACCOUNT -e "ACECAM_MAX_DURATION_SECONDS=$MAX_SECONDS" \
+            "$WORKER_IMAGE"
+
+      - name: Resumen
+        if: always()
+        env:
+          HAY: ${{ steps.cola.outputs.hay }}
+          OUTCOME: ${{ job.status }}
+        run: |
+          {
+            echo "### Worker del modelo"
+            echo ""
+            echo "| Paso | Resultado |"
+            echo "| --- | --- |"
+            echo "| Partidos en cola | ${HAY:-sin dato} |"
+            echo "| Imagen | \`$WORKER_IMAGE\` |"
+            echo "| Duración máxima del video | $MAX_SECONDS s |"
+            echo "| Resultado | $OUTCOME |"
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -195,3 +195,11 @@
     transform: translateX(-100%);
   }
 }
+
+@keyframes precio-entra {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .precio-entra { animation: precio-entra 0.35s ease-out; }
+}

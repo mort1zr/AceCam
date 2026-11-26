@@ -82,9 +82,13 @@ async function checkAttachment(file, signal) {
   if (error) throw Object.assign(new Error(error), { code: 'applications/video' })
 }
 
+// PCIT-251: en producción el video va al servicio de postulaciones en Azure; sin la variable,
+// a la ruta del mismo origen (demo local de PCIT-182).
+const applicationVideoApi = () => String(import.meta.env.VITE_APPLICATION_VIDEO_API_URL ?? '').trim().replace(/\/+$/, '')
+
 async function attachVideo({ orgId, formId, applicationId, file, signal }) {
   const path = [orgId, formId, applicationId].map(encodeURIComponent).join('/')
-  const response = await fetch(`/api/application-video/${path}`, {
+  const response = await fetch(`${applicationVideoApi()}/api/application-video/${path}`, {
     method: 'POST', headers: { 'Content-Type': 'application/octet-stream' }, body: file, signal,
   })
   if (!response.ok) {
@@ -109,7 +113,7 @@ function VideoField({ onChange }) {
 }
 
 function Formulario({ orgId, formId }) {
-  const videoEnabled = import.meta.env.DEV && import.meta.env.MODE === 'demo'
+  const videoEnabled = (import.meta.env.DEV && import.meta.env.MODE === 'demo') || Boolean(applicationVideoApi())
   const [available, setAvailable] = useState(null)
   const [guardian, setGuardian] = useState(false)
   const [sending, setSending] = useState(false)

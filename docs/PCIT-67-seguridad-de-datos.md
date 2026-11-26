@@ -9,6 +9,7 @@ Ley N.° 29733 de Protección de Datos Personales del Perú y su reglamento.
 | 2 | [Matriz de acceso por rol y organización](#2-matriz-de-acceso-por-rol-y-organización) | PCIT-210, PCIT-211 |
 | 3 | [Cobertura de las reglas](#3-cobertura-de-las-reglas) | PCIT-212 |
 | 4 | [Revisión de reglas y hallazgos](#4-revisión-de-reglas-y-hallazgos) | PCIT-217 |
+| 5 | [OWASP Top 10 y ASVS nivel 1](PCIT-216-owasp.md) (documento aparte) | PCIT-216 |
 
 Fuentes revisadas: `firebase/firestore.rules`, `firebase/storage.rules`,
 [`docs/firestore-schema.md`](firestore-schema.md), el servidor de videos
@@ -54,12 +55,27 @@ matriz de acceso (PCIT-210).
 | `orgs/{orgId}/applications/{appId}/video.{mp4,mov}` | Video de una postulación | **Sí** | **Sensible** | Nadie desde la web: las reglas lo cierran. El equipo de la organización lo ve a través del servidor, que comprueba la sesión y la organización (`Cache-Control: private, no-store`) | ⚠️ **Sin plazo.** Se conserva aunque se desactive el enlace |
 | Cualquier otra ruta | — | — | — | Nadie: todo lo demás está cerrado | — |
 
+### Azure Blob Storage (PCIT-222)
+
+Desde PCIT-225 la web sube y lee los videos de los partidos en Azure Blob cuando
+`VITE_VIDEO_API_URL` está configurada (producción). Cuenta `acecamvideosfba600`,
+contenedor privado `videos`, región **Chile Central**, cifrado en reposo de Azure.
+La web nunca recibe claves: la API de videos comprueba la sesión de Firebase y el rol
+y entrega un enlace SAS temporal (10 minutos para leer, 15 para subir).
+
+| Ruta | Contenido | ¿Menores? | Nivel | Quién lee | Conservación |
+| --- | --- | --- | --- | --- | --- |
+| `orgs/{orgId}/matches/{matchId}/video.{mp4,mov}` | Video original del partido | Puede haber | **Sensible** | Mismas condiciones que en Storage, aplicadas por la API de videos (`web/server/azure-videos/access.js`) | ⚠️ **Sin plazo** (PCIT-221). Borrado accidental recuperable 7 días (*soft delete*) |
+| `orgs/{orgId}/matches/{matchId}/processed.mp4` | Video anotado por el worker en Azure (PCIT-226) | Puede haber | **Sensible** | Igual que el original. Solo el worker escribe, con su identidad administrada | ⚠️ **Sin plazo** (PCIT-221) |
+| Registros de la API de videos (Log Analytics `acecam-logs`) | Método, ruta, estado y duración de cada petición; **sin** token, correo ni nombre | No | Interno | El equipo, desde el portal de Azure | 30 días (retención por defecto del espacio de trabajo) |
+
 ### Fuera de Firestore y Storage
 
 | Lugar | Datos | Conservación |
 | --- | --- | --- |
 | Firebase Authentication | Correo y contraseña (Google guarda la contraseña cifrada) | ⚠️ **Sin plazo.** La web no permite borrar la cuenta |
 | Archivos temporales del worker (`acecam-worker/match-…`) | Copia del video mientras se analiza | Se borran al terminar, con éxito o con error (`shutil.rmtree`) |
+| Contenedor del worker en Azure (tarea `acecam-worker`) | Copia del video mientras se analiza, y la cuenta de servicio de Firebase en un archivo temporal con permisos `0600` | Se borran al terminar; el contenedor de cada ejecución se descarta |
 | Archivos temporales del servidor de videos (`acecam-application-video-…`) | Video recibido de una postulación | Se borran al terminar la subida |
 | Hoja de Google de la organización (PCIT-197) | Respuestas del Google Form | Las gestiona la organización en su propia cuenta de Google |
 | Datos de ejemplo (`npm run seed`) | Personas ficticias | Solo en los emuladores |
@@ -185,6 +201,14 @@ mismos datos. Si una regla cambia sin actualizar la matriz, falla la celda con s
 rol y su operación, por ejemplo
 `players.get · leer players/p-a > otroEntrenador → denegado`.
 
+**Las filas `storage.*` también se prueban contra Azure (PCIT-228).** En producción los
+videos están en Azure Blob y quien decide es la API de videos, no `storage.rules`.
+`tests/azure/accessMatrix.azure.test.js` recorre las mismas filas y roles: pide el enlace
+a la API y lo usa en Azurite. Única diferencia, a propósito y más estricta:
+**`storage.videoDelete` en Azure no lo permite nadie**, porque la API solo firma enlaces
+para subir o leer; el borrado será parte de PCIT-221. La prueba falla si aparece
+cualquier otra diferencia, o si una diferencia concede un permiso que la matriz no da.
+
 Para cambiar un permiso: edita la regla, actualiza su fila en `accessMatrix.js`,
 ejecuta `node scripts/accessMatrixTable.mjs --write` desde `web/` y
 `npm run test:rules`.
@@ -238,14 +262,14 @@ con los hallazgos del inventario (sección 1). Cada hallazgo tiene una decisión
 | R1 | **Invitaciones sin verificar el correo.** El registro con correo y contraseña no verifica el correo. Quien conozca el correo invitado puede registrarse antes que la persona, leer `invites/{correo}` y aceptar la invitación, aunque sea de administrador | **Alto** | **Corregido en PCIT-220.** Las reglas exigen `email_verified` para leer la invitación propia, aceptarla y crear la ficha por invitación. El registro con invitación envía el correo de verificación y la pantalla *Verifica tu correo* termina la unión al club. Pruebas: `tests/rules/invites.rules.test.js` y `tests/auth/register.test.js` |
 | R2 | **El equipo podía reescribir cualquier campo de una postulación**: ciudad, mensaje, videos, el apoderado de un menor… La regla solo impedía cambiar unos pocos campos | Medio | **Corregido.** El equipo solo cambia `status`, `internalNotes` (hasta 2000 caracteres), `reviewedBy` (solo con su propio UID) y `updatedAt`. La vinculación de jugador sigue en su regla aparte |
 | R3 | **El alta manual de postulaciones casi no validaba**: admitía cualquier campo y un menor sin apoderado | Medio | **Corregido.** Mismos campos y validaciones que una postulación importada de Google, con la autorización firmada por quien la registra y apoderado obligatorio para menores. La web no usa esta vía; queda cerrada a datos válidos |
-| R4 | **No hay borrado real ni plazos de conservación** (inventario 1, 2, 3 y 7). La política de privacidad promete borrar en 30 días y reconoce los derechos ARCO | Medio | **Pendiente: PCIT-221** (Sprint 5). Mientras tanto, procedimiento manual (abajo) |
+| R4 | **No hay borrado real ni plazos de conservación** (inventario 1, 2, 3 y 7). La política de privacidad promete borrar en 30 días y reconoce los derechos ARCO | Medio | **Corregido en PCIT-221.** Comando `scripts/borrarDatos.mjs` (Firestore, Storage, Azure y Auth) y plazos de conservación (abajo) |
 | R5 | **El administrador de plataforma lee usuarios y organizaciones de todos los clubes** (PCIT-188) | Medio | **Aceptado.** La administración (PCIT-189) lo necesita. Solo lee `users`, `orgs` y `usage`; la matriz prueba que **no** lee jugadores, partidos, postulaciones, notas ni videos. El permiso solo se concede desde la consola y los cambios quedan en la bitácora (PCIT-203) |
 | R6 | **Formulario público sin sesión**: posible spam de postulaciones | Medio | **Mitigado.** Enlace activo obligatorio, validación estricta de cada campo, campo trampa (PCIT-185). Se completa con App Check (PCIT-219) |
 | R7 | **Todos los entrenadores del club ven las postulaciones**, también las de menores | Bajo | **Aceptado.** Reclutamiento es una tarea del equipo. Ningún otro club ni la plataforma las ven (matriz) |
 | R8 | **`matches.opponent` guarda el nombre del rival**, que no dio su autorización | Bajo | **Aceptado.** Es el dato mínimo para identificar el partido y solo lo ven quienes gestionan el partido. Se puede escribir solo un apellido o iniciales |
 | R9 | **Leer un ID que no existe se permite** en `players`, `matches` y `applications`, lo que revela si un ID existe en otro club | Bajo | **Aceptado.** Los IDs son aleatorios de 20 caracteres y el alta de partidos lo necesita. Nunca se devuelven datos ajenos |
 | R10 | **Cualquiera con el ID lee un enlace de postulación** | Bajo | **Aceptado por diseño** (PCIT-54). El documento solo tiene `createdAt`; el ID es aleatorio y listar los enlaces exige ser dueño o administrador |
-| R11 | **La bitácora administrativa no tiene plazo** | Bajo | **Aceptado.** Es de solo añadir; el plazo se define con R4 en PCIT-221 |
+| R11 | **La bitácora administrativa no tiene plazo** | Bajo | **Corregido en PCIT-221.** Plazo de 2 años, con `borrarDatos.mjs --audit-before` |
 
 ### Puntos revisados sin hallazgos
 
@@ -259,19 +283,48 @@ con los hallazgos del inventario (sección 1). Cada hallazgo tiene una decisión
 | Storage | Todo cerrado salvo los videos de partidos; los videos de postulaciones solo se sirven por el servidor, que comprueba la sesión y el club |
 | Reglas sin condición | Ninguna (control de cobertura, sección 3) |
 
-### Procedimiento manual de borrado (hasta PCIT-221)
+### Borrado de datos y plazos de conservación (PCIT-221)
 
-Para una solicitud ARCO o el cierre de una organización, recibida en el correo de
-la política de privacidad, un operador del proyecto, en un máximo de 30 días:
+Una solicitud ARCO o el cierre de una organización se resuelve con **un solo comando**,
+que ejecuta un operador del proyecto desde `web/` en un máximo de 30 días:
 
-1. Identifica en la consola de Firebase la organización (`orgs`) o la persona
-   (`players`, `applications`, `users`).
-2. Borra sus documentos en Firestore, incluidas las subcolecciones (`usage`,
-   `applicationForms`, `recruitmentIntegrations`, `coachNotes`) y las invitaciones.
-3. Borra en Storage la carpeta `orgs/{orgId}/…` o los videos de esa persona
-   (originales, `processed.mp4` y videos de postulaciones).
-4. Borra la cuenta en Authentication.
-5. Responde a la solicitud indicando la fecha del borrado.
+```bash
+node scripts/borrarDatos.mjs --project acecam-e93a2 --org <orgId>          # una organización entera
+node scripts/borrarDatos.mjs --project acecam-e93a2 --player <playerId>    # un jugador (titular de los datos)
+node scripts/borrarDatos.mjs --project acecam-e93a2 --application <appId>  # una postulación
+node scripts/borrarDatos.mjs --project acecam-e93a2 --user <uid>           # un miembro del equipo
+node scripts/borrarDatos.mjs --project acecam-e93a2 --audit-before <AAAA-MM-DD>  # depurar la bitácora
+```
+
+- **Sin `--execute` no borra nada**: muestra el plan (documentos, archivos de Firebase Storage,
+  videos de Azure Blob y cuentas de Auth). Se revisa y se repite con `--execute`.
+- `--out informe.json` guarda la constancia de lo borrado: solo rutas e IDs, sin nombres ni
+  correos. Se adjunta a la respuesta de la solicitud.
+- Borra en este orden: videos (Firebase Storage **y Azure Blob**: original, `processed.mp4` y
+  videos de postulaciones), documentos con sus subcolecciones y, al final, las cuentas. Si se
+  corta, repetir el comando termina el trabajo.
+- `--user` no borra a la dueña de una organización: hay que borrar la organización. Los
+  jugadores y partidos que creó un miembro son del club y se conservan.
+- Credenciales: `GOOGLE_APPLICATION_CREDENTIALS` (cuenta de servicio con permisos de
+  Firestore, Storage y Auth) y `az login` con un rol de datos sobre `acecamvideosfba600`.
+- Probado contra los emuladores y Azurite: `tests/arco/erase.test.js`.
+
+**Ningún video queda huérfano desde la web:** la web no borra partidos ni postulaciones (solo
+marca jugadores como retirados) y, en Azure, la API no firma enlaces de borrado. Todo borrado
+pasa por este comando, que quita el documento y sus videos juntos.
+
+**Plazos de conservación** (también en la política de privacidad):
+
+| Dato | Plazo | Cómo se aplica |
+| --- | --- | --- |
+| Datos de una organización activa | Mientras la cuenta esté activa | — |
+| Cierre de cuenta o solicitud ARCO | Máximo 30 días desde la solicitud | `--org`, `--player`, `--application` o `--user` |
+| Jugador retirado de la plantilla (`deletedAt`) | 12 meses | `--player` |
+| Postulación descartada | 6 meses | `--application` |
+| Bitácora administrativa (`platformAudit`) | 2 años | `--audit-before` con la fecha de hace 2 años |
+
+Los plazos se revisan cada mes. Automatizarlos (una tarea programada) queda para cuando
+el proyecto tenga un entorno de servidor con credenciales propias.
 
 ### Pruebas
 
