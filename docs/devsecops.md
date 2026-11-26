@@ -241,7 +241,7 @@ costos en [PCIT-222 · Videos en Azure](PCIT-222-videos-en-azure.md).
 | Grupo de recursos | `acecam-rg` | Contiene todo lo de AceCam en Azure |
 | Cuenta de almacenamiento | `acecamvideosfba600`, contenedor privado `videos` | Videos originales y procesados. *Soft delete* de 7 días |
 | Entorno de Container Apps | `acecam-env` (Express) | Donde corren la API y el servicio de postulaciones. **Express no admite Jobs**, y Azure for Students solo crea entornos Express |
-| Container App | `acecam-videos-api` | API que entrega enlaces temporales (SAS) para subir y ver videos |
+| Container App | `acecam-videos-api` | API que entrega enlaces temporales (SAS) para subir y ver videos. Con `ACECAM_YOUTUBE_IMPORT_ENABLED`, también importa videos de YouTube a Blob (`POST /api/videos/import-youtube`, PCIT-243/248). 0.5 vCPU y 1 GiB por `yt-dlp` y `ffprobe` |
 | Container App | `acecam-application-video` | Recibe y valida los videos del formulario público de postulación y los guarda privados en Blob (PCIT-251, ver [su documento](PCIT-251-postulaciones-en-azure.md)) |
 | Worker del modelo | Workflow **Worker del modelo** (`.github/workflows/worker.yml`), en GitHub Actions | Cada 10 min mira si hay partidos en cola; si hay, procesa uno con la imagen `acecam-worker:latest` (4 vCPU, videos de hasta 600 s). Lee y escribe los videos en Blob con la identidad `acecam-github` (OIDC) (PCIT-247) |
 | Identidad administrada | `acecam-github` | GitHub Actions entra en Azure con ella (OIDC, sin contraseña). Contributor sobre `acecam-rg` |
@@ -258,8 +258,10 @@ costos en [PCIT-222 · Videos en Azure](PCIT-222-videos-en-azure.md).
 | `AZURE_VIDEOS_API_IDENTITY_ID`, `AZURE_VIDEOS_API_IDENTITY_CLIENT_ID` | Variable | ID de recurso y client ID de `acecam-videos-api` |
 | `VITE_VIDEO_API_URL` | Variable | URL de la API de videos. Vacía, la web vuelve a Firebase Storage |
 | `VITE_APPLICATION_VIDEO_API_URL` | Variable | URL del servicio de videos de postulación (PCIT-251). Vacía, el formulario no ofrece adjuntar video |
+| `ACECAM_YOUTUBE_IMPORT_ENABLED` | Variable | `true` enciende la ruta de YouTube en la API de videos (PCIT-248). Vacía o distinta, la ruta responde 404 |
+| `VITE_AZURE_YOUTUBE_IMPORT_ENABLED` | Variable | `true` habilita **Usar enlace** en Analizar video. Créala junto con la anterior: si la API no tiene la ruta, el usuario vería un error |
 | `FIREBASE_SERVICE_ACCOUNT_AZURE` | Secreto | Cuenta de servicio de Firebase de **solo lectura** para la API |
-| `FIREBASE_SERVICE_ACCOUNT_WORKER` | Secreto | Cuenta de servicio de Firebase con escritura en Firestore para el worker |
+| `FIREBASE_SERVICE_ACCOUNT_WORKER` | Secreto | Cuenta de servicio de Firebase con escritura en Firestore. La usan el worker, el servicio de postulaciones y la importación de YouTube de la API (`FIREBASE_SERVICE_ACCOUNT_YOUTUBE_IMPORT` en la Container App). Se reutiliza para no gestionar otra clave; el rol de Firestore vale para toda la base, así que una cuenta aparte solo daría revocación y auditoría por separado. Para separarla: crea otra cuenta con el rol *Usuario de Cloud Datastore* y cambia el secreto que lee el job `desplegar` |
 
 ### 5.3 Qué hacer si falla
 
@@ -268,6 +270,8 @@ costos en [PCIT-222 · Videos en Azure](PCIT-222-videos-en-azure.md).
 | "Iniciar sesión en Azure": `AADSTS700213 No matching federated identity record` | El sujeto que envía GitHub no está en las credenciales federadas de `acecam-github`. Copia el *subject claim* del log y créalo tal cual (`az identity federated-credential create … --subject "<subject>"`). **Pasa cada vez que se renombra el repositorio**: el sujeto lleva el nombre, por ejemplo `repo:mort1zr@138200154/AceCam@1443135943:environment:production` |
 | El worker no puede leer o escribir en Blob (`AuthorizationPermissionMismatch`) | Falta el rol de datos de `acecam-github` sobre la cuenta de almacenamiento (§5.4) |
 | "Comprobar configuración" avisa y salta el despliegue | Falta una variable o un secreto de 5.2. Créalo y lanza **Run workflow** sobre `main` |
+| "Comprobar la API publicada": la ruta de YouTube responde 404 con la variable en `true` | Falta el secreto `FIREBASE_SERVICE_ACCOUNT_WORKER` (el despliegue lo avisa y deja la ruta apagada) |
+| Importar desde YouTube falla con `import/youtube-service` o `import/youtube-unavailable` con un video que sí existe | YouTube suele bloquear descargas desde IP de nube ("confirma que no eres un bot"). Revisa los registros de `acecam-videos-api`. Si es eso, apaga `ACECAM_YOUTUBE_IMPORT_ENABLED` y `VITE_AZURE_YOUTUBE_IMPORT_ENABLED` y usa **Subir archivo** |
 | La API no responde (`/healthz`) | Portal → `acecam-videos-api` → Registros. Suele ser el secreto `FIREBASE_SERVICE_ACCOUNT_AZURE` vencido o revocado |
 | Un partido se queda **En cola** | Actions → **Worker del modelo**: mira la última ejecución. Si no hay ejecuciones recientes, GitHub pudo pausar el workflow programado (pasa tras 60 días sin actividad en el repositorio): actívalo de nuevo o lánzalo con **Run workflow** |
 | Un partido pasa a **Error** por duración | El video supera `MAX_SECONDS` de `worker.yml` (600 s). Un video más largo no cabe en el límite de 6 h de un runner |

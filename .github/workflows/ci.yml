@@ -743,6 +743,13 @@ jobs:
           fi
           grep -q "Falta la variable de entorno" arranque.log || { cat arranque.log; exit 1; }
 
+      # PCIT-248: la importación de YouTube necesita yt-dlp y ffprobe operativos dentro de la imagen.
+      - name: Comprobar yt-dlp y ffprobe
+        run: |
+          docker run --rm --entrypoint sh "$IMAGE:$GITHUB_SHA" -c \
+            'echo "yt-dlp $("$ACECAM_YT_DLP" --version)" && "$ACECAM_FFPROBE" -version | head -n 1' | tee binarios.log
+          grep -q '^yt-dlp ' binarios.log && grep -q '^ffprobe version' binarios.log
+
       - name: Publicar en GitHub Packages
         if: github.event_name != 'pull_request'
         env:
@@ -796,6 +803,11 @@ jobs:
           API_IDENTITY: ${{ vars.AZURE_VIDEOS_API_IDENTITY_ID }}
           API_CLIENT_ID: ${{ vars.AZURE_VIDEOS_API_IDENTITY_CLIENT_ID }}
           FIREBASE_SA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_AZURE }}
+          # PCIT-248: importación de YouTube (POST /api/videos/import-youtube). Apagada salvo que
+          # la variable ACECAM_YOUTUBE_IMPORT_ENABLED valga "true". Reutiliza la cuenta de servicio
+          # del worker, que ya lee y escribe en Firestore; la de firmas (FIREBASE_SA) sigue aparte.
+          YT_ENABLED: ${{ vars.ACECAM_YOUTUBE_IMPORT_ENABLED }}
+          YT_SA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_WORKER }}
         run: |
           az extension add --name containerapp --upgrade --only-show-errors
           ENV_VARS=(
@@ -803,14 +815,29 @@ jobs:
             "FIREBASE_PROJECT_ID=acecam-e93a2" "ALLOWED_ORIGIN=https://acecam-e93a2.web.app"
             "FIREBASE_SERVICE_ACCOUNT=secretref:firebase-sa"
           )
+          SECRETS=("firebase-sa=$FIREBASE_SA")
+          youtube=false
+          if [ "$YT_ENABLED" = "true" ]; then
+            if [ -n "$YT_SA" ]; then
+              youtube=true
+              SECRETS+=("youtube-import-sa=$YT_SA")
+              ENV_VARS+=("FIREBASE_SERVICE_ACCOUNT_YOUTUBE_IMPORT=secretref:youtube-import-sa")
+            else
+              echo "::warning::ACECAM_YOUTUBE_IMPORT_ENABLED=true sin el secreto FIREBASE_SERVICE_ACCOUNT_WORKER: la importación de YouTube queda apagada."
+            fi
+          fi
+          ENV_VARS+=("ACECAM_YOUTUBE_IMPORT_ENABLED=$youtube")
+          echo "youtube=$youtube" >> "$GITHUB_OUTPUT"
+          # yt-dlp y ffprobe no caben en 0.25 vCPU / 0.5 GiB: la API usa 0.5 vCPU / 1 GiB.
           if az containerapp show -n "$APP_NAME" -g "$RG" -o none 2>/dev/null; then
-            az containerapp secret set -n "$APP_NAME" -g "$RG" --secrets "firebase-sa=$FIREBASE_SA" -o none
-            az containerapp update -n "$APP_NAME" -g "$RG" --image "$IMAGE:$GITHUB_SHA" --set-env-vars "${ENV_VARS[@]}" -o none
+            az containerapp secret set -n "$APP_NAME" -g "$RG" --secrets "${SECRETS[@]}" -o none
+            az containerapp update -n "$APP_NAME" -g "$RG" --image "$IMAGE:$GITHUB_SHA" \
+              --cpu 0.5 --memory 1.0Gi --set-env-vars "${ENV_VARS[@]}" -o none
           else
             az containerapp create -n "$APP_NAME" -g "$RG" --environment "$ENVIRONMENT" \
               --image "$IMAGE:$GITHUB_SHA" --ingress external --target-port 8080 \
-              --min-replicas 0 --max-replicas 2 --cpu 0.25 --memory 0.5Gi \
-              --user-assigned "$API_IDENTITY" --secrets "firebase-sa=$FIREBASE_SA" \
+              --min-replicas 0 --max-replicas 2 --cpu 0.5 --memory 1.0Gi \
+              --user-assigned "$API_IDENTITY" --secrets "${SECRETS[@]}" \
               --env-vars "${ENV_VARS[@]}" --tags proyecto=acecam -o none
           fi
           FQDN=$(az containerapp show -n "$APP_NAME" -g "$RG" --query properties.configuration.ingress.fqdn -o tsv)
@@ -820,12 +847,18 @@ jobs:
         if: steps.config.outputs.ok == 'true'
         env:
           URL: ${{ steps.deploy.outputs.url }}
+          YOUTUBE: ${{ steps.deploy.outputs.youtube }}
         run: |
           for _ in 1 2 3 4 5 6 7 8 9 10; do
             if [ "$(curl -s --max-time 15 "$URL/healthz")" = "ok" ]; then
               status=$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'Origin: https://acecam-e93a2.web.app' "$URL/api/videos/sign")
               [ "$status" = "401" ] || { echo "::error::Sin sesión debería responder 401 y respondió $status."; exit 1; }
-              echo "API de videos en línea: $URL"; exit 0
+              # PCIT-248: encendida, la ruta de YouTube rechaza sin sesión (401); apagada, no existe (404).
+              expected=404; [ "$YOUTUBE" = "true" ] && expected=401
+              status=$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'Origin: https://acecam-e93a2.web.app' \
+                -H 'Content-Type: application/json' --data '{}' "$URL/api/videos/import-youtube")
+              [ "$status" = "$expected" ] || { echo "::error::La ruta de YouTube debería responder $expected sin sesión y respondió $status."; exit 1; }
+              echo "API de videos en línea: $URL (YouTube: $YOUTUBE)"; exit 0
             fi
             sleep 15
           done
@@ -836,6 +869,7 @@ jobs:
         env:
           URL: ${{ steps.deploy.outputs.url }}
           OUTCOME: ${{ steps.deploy.outcome }}
+          YOUTUBE: ${{ steps.deploy.outputs.youtube }}
         run: |
           {
             echo "### Despliegue de la API de videos (Azure)"
@@ -845,6 +879,7 @@ jobs:
             echo "| Imagen | \`$IMAGE:${GITHUB_SHA:0:12}\` |"
             echo "| Despliegue | $OUTCOME |"
             echo "| URL | ${URL:-sin URL} |"
+            echo "| Importación de YouTube | ${YOUTUBE:-sin dato} |"
           } >> "$GITHUB_STEP_SUMMARY"
 
   # ---------- Videos de postulación (PCIT-251) ----------
