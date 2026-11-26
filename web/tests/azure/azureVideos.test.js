@@ -4,7 +4,7 @@
 
 import { spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { unlink, writeFile } from 'node:fs/promises'
+import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { createConnection } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -101,7 +101,9 @@ describe('almacenamiento de importaciones de YouTube en Azurite', () => {
     const store = createAzureVideoImportStore({ db, container })
     const matchId = `yt-${Date.now()}`
     const videoPath = `orgs/org-a/matches/${matchId}/video.mp4`
-    const localPath = join(tmpdir(), `acecam-${matchId}.mp4`)
+    // Carpeta temporal privada (mkdtemp, permisos 0700): nadie más puede crear o cambiar el archivo.
+    const tempDir = await mkdtemp(join(tmpdir(), 'acecam-'))
+    const localPath = join(tempDir, `${matchId}.mp4`)
     const sha256 = createHash('sha256').update(bytes).digest('hex')
     const record = {
       orgId: 'org-a', actorId: 'coach-a', matchId, sourceHash: 'video-de-prueba',
@@ -123,7 +125,7 @@ describe('almacenamiento de importaciones de YouTube en Azurite', () => {
       await expect(store.putIfAbsent({ ...record, sourceHash: 'otro-video' })).rejects.toMatchObject({ code: 'import/conflict' })
       expect((await db.doc(`matches/${matchId}`).get()).exists).toBe(false)
     } finally {
-      await unlink(localPath)
+      await rm(tempDir, { recursive: true, force: true })
     }
   })
 
@@ -136,7 +138,8 @@ describe('almacenamiento de importaciones de YouTube en Azurite', () => {
     const quotaId = 'match-yt-cuota'
     const usage = db.doc(`orgs/${orgId}/usage/${usagePeriod()}`)
     const videoPath = `orgs/${orgId}/matches/${matchId}/video.mp4`
-    const localPath = join(tmpdir(), `acecam-${Date.now()}-cola.mp4`)
+    const tempDir = await mkdtemp(join(tmpdir(), 'acecam-'))
+    const localPath = join(tempDir, 'cola.mp4')
     const container = serviceClient.getContainerClient(CONTAINER)
     const store = createAzureVideoImportStore({ db, container })
     const [host, port] = process.env.FIRESTORE_EMULATOR_HOST.split(':')
@@ -188,7 +191,7 @@ describe('almacenamiento de importaciones de YouTube en Azurite', () => {
       expect(calls).toBe(2)
     } finally {
       await env.cleanup()
-      await unlink(localPath).catch(error => { if (error.code !== 'ENOENT') throw error })
+      await rm(tempDir, { recursive: true, force: true })
     }
   })
 })
