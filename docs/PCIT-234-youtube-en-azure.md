@@ -1,0 +1,22 @@
+# PCIT-234 · Importar YouTube en Azure
+
+## API y almacenamiento
+
+PCIT-243 prepara `POST /api/videos/import-youtube`. Recibe `{ url, matchId }` y un token de Firebase. La API obtiene el usuario y su organización de Firebase, limita el origen al sitio configurado y comprueba que el miembro pueda analizar y que su organización esté activa. Reutiliza el resolver y el descargador de la demo. Acepta YouTube público, MP4, mínimo 720p y entre 25 y 60 FPS, con un límite de 24 MiB por importación y una importación simultánea por instancia. No aplica un tope de duración. La imagen de la API incluye `yt-dlp`, EJS y `ffprobe`.
+
+PCIT-242 guarda el original en `orgs/{orgId}/matches/{matchId}/video.mp4` en el contenedor privado. El recibo en `_azureVideoImports/{matchId}` permite reintentar con la misma sesión y la misma fuente. La escritura condicional de Blob impide reemplazar un archivo existente durante la importación. La API confirma el blob antes de devolver `{ videoPath }`. El alta del partido y el contador siguen a cargo de la transacción existente de Analizar video. La opción de YouTube en la pantalla se habilita con `VITE_AZURE_YOUTUBE_IMPORT_ENABLED=true`. [Configuración y verificación de la pantalla](PCIT-242-youtube-desde-analizar.md)
+
+La ruta está deshabilitada por defecto. Para una revisión aislada de la API de prueba, usa `ACECAM_YOUTUBE_IMPORT_ENABLED=true`, configura `FIREBASE_SERVICE_ACCOUNT_YOUTUBE_IMPORT` como referencia a un secreto de Azure y ajusta `ALLOWED_ORIGIN` al entorno de prueba. La cuenta de servicio de importación necesita leer usuarios, organizaciones y partidos y crear los recibos internos. Conserva por separado la credencial de solo lectura usada por la API de firmas. La imagen configura `ACECAM_YT_DLP` y `ACECAM_FFPROBE` con rutas absolutas. La identidad administrada de la API necesita lectura y escritura en el contenedor de videos. Antes de abrir la ruta al equipo, comprueba también los límites del servicio y la política de salida a YouTube.
+
+## Comprobar el worker con Axel
+
+1. El worker ya corre en **GitHub Actions → Worker del modelo**, porque Azure for Students no admite Jobs en los entornos Express disponibles. Los videos siguen privados en Azure Blob y el estado en Firestore. PCIT-226 y PCIT-247 están cerradas. Según la evidencia de Axel, el [run 45719212049](https://github.com/mort1zr/AceCam/actions/runs/45719212049) dejó el partido `ip0SBgVOFaDKL8IknyYx` en `listo` y guardó el resultado en Blob.
+2. El workflow consulta la cola cada 10 minutos, aunque GitHub puede retrasarlo; para la presentación se puede ejecutar manualmente desde `main`. Requiere `FIREBASE_SERVICE_ACCOUNT_WORKER`, las variables de identidad de Azure y el permiso Storage Blob Data Contributor. No crear un Container Apps Job ni otro entorno para el worker. El runner limita el video a 600 segundos.
+3. En PCIT-249, Axel debe abrir el reporte y reproducir `processed.mp4` desde la web, anotando versión, partido y resultado. Esta comprobación sigue pendiente aunque el worker haya finalizado.
+4. Una vez integradas PCIT-243 y PCIT-242, habilita la ruta en el entorno de prueba coordinado con Fabián. En PCIT-244, verifica la importación desde Analizar video hasta el Dashboard con un clip público de tenis con permiso de uso. Comprueba también que un enlace no disponible muestre un error sin crear un partido en cola.
+
+## Verificación local
+
+- Pruebas de la ruta con Auth, Firestore, YouTube, ffprobe y almacenamiento simulados. Se verifica el contrato HTTP y que un video inválido no alcanza la persistencia.
+- Prueba del adaptador con Azurite y el emulador de Firestore. Comprueba que el blob privado tiene el contenido esperado, que dos escrituras concurrentes de la misma importación se pueden reconciliar y que otra identidad u otra fuente recibe un conflicto.
+- `ffprobe` 9.1 leyó un MP4 generado a 1280×720 y 25 FPS e identificó los 24 FPS del clip incluido. `yt-dlp` 2026.11.23 se ejecutó contra YouTube desde Windows y el resolver devolvió `import/youtube-unavailable` para un enlace inexistente. Falta construir la imagen y completar una descarga de un clip autorizado con esa imagen.

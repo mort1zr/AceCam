@@ -58,7 +58,7 @@ describe('Analizar video v1', () => {
     render(<Analizar {...setup()} />)
     const input = screen.getByLabelText('Selecciona el video del partido')
     const notice = document.getElementById(input.getAttribute('aria-describedby'))
-    expect(notice.textContent).toContain('MP4 o MOV sin tope de duración')
+    expect(notice.textContent).toContain('MP4 o MOV de hasta 10 minutos')
     expect(notice.textContent).toContain('720p (1280×720) y de 25 a 60 FPS')
     expect(notice.textContent).toContain('1080p a 30 FPS')
     expect(notice.textContent).toContain('con toda la cancha visible y sin cortes')
@@ -182,8 +182,10 @@ describe('Analizar video v1', () => {
     expect(screen.queryByRole('progressbar')).toBeNull()
   })
 
-  it('rechaza un archivo de baja resolución antes de encolar y permite reemplazarlo', async () => {
-    const message = 'El video debe tener al menos 720p (1280×720). Grábalo o expórtalo en 720p o 1080p.'
+  it.each([
+    'El video debe tener al menos 720p (1280×720). Grábalo o expórtalo en 720p o 1080p.',
+    'El video debe durar como máximo 10 minutos. Recórtalo o selecciona un video más corto.',
+  ])('rechaza el archivo antes de encolar y permite reemplazarlo: %s', async message => {
     validateLocalVideo.mockResolvedValueOnce(message)
     const props = setup()
     const user = userEvent.setup()

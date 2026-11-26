@@ -62,6 +62,15 @@ function checkPermissions(value) {
   return blocked.length ? `no bloquea ${blocked.join(', ')}` : null
 }
 
+function checkOpenerPolicy(value) {
+  if (!value) return 'falta'
+  // Google Identity Services necesita comunicación con el popup de autorización (PCIT-196).
+  // https://developers.google.com/identity/oauth2/web/guides/get-google-api-clientid
+  return ['same-origin', 'same-origin-allow-popups'].includes(value.trim().toLowerCase())
+    ? null
+    : `es "${value}" y debe ser "same-origin" o "same-origin-allow-popups"`
+}
+
 export const RULES = {
   'content-security-policy': checkCsp,
   'strict-transport-security': checkHsts,
@@ -69,7 +78,7 @@ export const RULES = {
   'x-frame-options': equals('DENY'),
   'referrer-policy': checkReferrer,
   'permissions-policy': checkPermissions,
-  'cross-origin-opener-policy': equals('same-origin'),
+  'cross-origin-opener-policy': checkOpenerPolicy,
 }
 
 /** Devuelve [{ header, problem }] con las cabeceras que fallan; vacío si todo está bien. */

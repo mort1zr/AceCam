@@ -102,7 +102,7 @@ function VideoField({ onChange }) {
     <div className="sm:col-span-2">
       <label className={labelClass} htmlFor="application-video">Video (opcional)</label>
       <p className="mb-2 text-sm text-muted" id="application-video-requirements">
-        MP4 o MOV de hasta {formatBytes(MAX_VIDEO_BYTES)}, sin tope de duración.
+        MP4 o MOV de hasta {formatBytes(MAX_VIDEO_BYTES)} y un máximo de 10 minutos.
         {' '}Mínimo {MIN_VIDEO_WIDTH}×{MIN_VIDEO_HEIGHT} y de {MIN_VIDEO_FPS} a {MAX_VIDEO_FPS} FPS.
         {' '}Recomendamos 1080p a 30 FPS, con cámara fija detrás de la línea de fondo, cancha completa y sin cortes.
       </p>

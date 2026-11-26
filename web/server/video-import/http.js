@@ -3,6 +3,7 @@ import { awaitWithAbort, isStorageVideoPath, readLimitedJson, VIDEO_IMPORT_MESSA
 const statuses = {
   'import/source': 400, 'import/input': 400, 'import/destination': 400, 'import/redirect': 400,
   'import/unavailable': 422, 'import/format': 415, 'import/size': 413, 'import/duration': 422, 'import/permission': 403,
+  'import/resolution': 422, 'import/fps': 422, 'import/youtube-source': 400,
   'import/conflict': 409, 'import/busy': 429, 'import/timeout': 504, 'import/download': 502, 'import/failed': 502,
   'import/youtube-unavailable': 422, 'import/youtube-live': 422, 'import/youtube-format': 422, 'import/youtube-service': 503,
 }
@@ -19,14 +20,15 @@ function error(status, code, extraHeaders) {
 }
 
 /** Web Request -> Response. Mount only with the authenticated core, never a demo service. */
-export function createVideoImportHttpHandler({ importVideo, origin, maxBodyBytes = 8192, timeoutMs = 120_000 }) {
+export function createVideoImportHttpHandler({ importVideo, origin, requestOrigin = origin, maxBodyBytes = 8192, timeoutMs = 120_000 }) {
   const expected = new URL(origin)
   if (typeof importVideo !== 'function' || expected.origin !== origin || (expected.protocol !== 'https:' && !(expected.protocol === 'http:' && ['localhost', '127.0.0.1', '[::1]'].includes(expected.hostname))) || !Number.isSafeInteger(maxBodyBytes) || maxBodyBytes < 1 || maxBodyBytes > 16384 || !Number.isSafeInteger(timeoutMs) || timeoutMs <= 0) throw new TypeError('A secured importer, exact application origin and bounded limits are required.')
+  if (new URL(requestOrigin).origin !== requestOrigin) throw new TypeError('Configure an exact request origin.')
 
   return async function handle(request) {
     const reject = (status, code, headers) => { void request.body?.cancel().catch(() => {}); return error(status, code, headers) }
     if (request.method !== 'POST') return reject(405, 'import/input', { Allow: 'POST' })
-    if (new URL(request.url).origin !== origin || (request.headers.has('origin') && request.headers.get('origin') !== origin)) return reject(403, 'import/permission')
+    if (new URL(request.url).origin !== requestOrigin || (request.headers.has('origin') && request.headers.get('origin') !== origin)) return reject(403, 'import/permission')
     const bearer = request.headers.get('authorization')?.match(/^Bearer ([A-Za-z0-9_.-]{1,8192})$/i)?.[1]
     if (!bearer) return reject(401, 'import/permission')
     if (request.headers.get('content-type')?.split(';')[0].trim().toLowerCase() !== 'application/json') return reject(415, 'import/input')

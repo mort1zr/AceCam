@@ -1,4 +1,6 @@
 // Shared wire values only: this module has no server APIs or session state.
+import { LOW_VIDEO_RESOLUTION_MESSAGE, VIDEO_FPS_MESSAGE } from './videoRequirements.js'
+
 export const VIDEO_IMPORT_MESSAGES = Object.freeze({
   'import/source': 'Usa un enlace directo HTTPS de un proveedor admitido.',
   'import/input': 'Revisa el enlace y los datos del partido.',
@@ -6,6 +8,8 @@ export const VIDEO_IMPORT_MESSAGES = Object.freeze({
   'import/redirect': 'El enlace tiene redirecciones que no podemos aceptar.',
   'import/unavailable': 'El video no está disponible públicamente. Prueba otro enlace o un archivo.',
   'import/format': 'Usa un MP4 o MOV válido con una pista de video.',
+  'import/resolution': LOW_VIDEO_RESOLUTION_MESSAGE,
+  'import/fps': VIDEO_FPS_MESSAGE,
   'import/size': 'El video supera el límite o la descarga está incompleta.',
   'import/permission': 'Tu sesión no permite importar este video. Vuelve a iniciar sesión.',
   'import/conflict': 'Este intento corresponde a otro video o sesión. Inicia un intento nuevo.',
@@ -15,6 +19,7 @@ export const VIDEO_IMPORT_MESSAGES = Object.freeze({
   'import/failed': 'No pudimos importar el video. Conservamos los datos para que puedas reintentarlo.',
   'import/response': 'El servicio devolvió una respuesta no válida. Vuelve a intentarlo.',
   'import/youtube-unavailable': 'El video de YouTube debe ser público y estar disponible sin iniciar sesión. Usa otro enlace o un archivo.',
+  'import/youtube-source': 'Usa el enlace HTTPS de un video público de YouTube.',
   'import/youtube-live': 'Espera a que termine la transmisión o usa un video ya grabado.',
   'import/youtube-format': 'Este video de YouTube no ofrece un MP4 compatible. Prueba otro enlace o un archivo.',
   'import/youtube-service': 'El servicio de YouTube no está disponible ahora. Inténtalo más tarde o usa un archivo.',

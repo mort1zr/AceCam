@@ -63,6 +63,15 @@ describe('cabeceras de seguridad (PCIT-215)', () => {
     expect(failing({ ...FIREBASE, 'x-content-type-options': 'sniff' })).toEqual(['x-content-type-options'])
   })
 
+  it('admite el popup OAuth de Google y sigue rechazando una política sin aislamiento', () => {
+    for (const policy of ['same-origin', 'same-origin-allow-popups']) {
+      expect(failing({ ...FIREBASE, 'cross-origin-opener-policy': policy })).toEqual([])
+    }
+    for (const policy of ['unsafe-none', '*', 'same-origin, unsafe-none']) {
+      expect(failing({ ...FIREBASE, 'cross-origin-opener-policy': policy })).toEqual(['cross-origin-opener-policy'])
+    }
+  })
+
   it('contra un servidor local: pasa con las cabeceras completas y falla indicando cuál', async () => {
     const good = await serve(FIREBASE)
     expect(await checkHeaders([good])).toEqual([{ url: good, failures: [] }])
