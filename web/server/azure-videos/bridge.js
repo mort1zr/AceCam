@@ -2,7 +2,7 @@
 
 const MAX_BODY_BYTES = 4096
 
-export async function toRequest(incoming, { maxBytes = MAX_BODY_BYTES } = {}) {
+export async function toRequest(incoming, { maxBytes = MAX_BODY_BYTES, signal } = {}) {
   const headers = new Headers()
   for (const [name, value] of Object.entries(incoming.headers)) {
     for (const item of [value].flat()) if (item !== undefined) headers.append(name, item)
@@ -18,7 +18,7 @@ export async function toRequest(incoming, { maxBytes = MAX_BODY_BYTES } = {}) {
     }
     body = Buffer.concat(chunks)
   }
-  return new Request(`http://localhost${incoming.url}`, { method: incoming.method, headers, body })
+  return new Request(`http://localhost${incoming.url}`, { method: incoming.method, headers, body, signal })
 }
 
 export async function sendResponse(outgoing, response) {

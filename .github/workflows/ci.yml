@@ -103,6 +103,10 @@ jobs:
               - 'web/server/azure-videos/**'
               - 'web/server/application-video/**'
               - 'web/server/video-import/**'
+              - 'web/src/panel/lib/planes.js'
+              - 'web/src/panel/lib/videoImportProtocol.js'
+              - 'web/src/panel/lib/videoRequirements.js'
+              - 'web/src/panel/lib/videoSources.js'
               - 'model/**'
               - '.github/workflows/ci.yml'
 
@@ -722,11 +726,11 @@ jobs:
           persist-credentials: false
 
       - name: Construir la imagen
-        working-directory: web/server/azure-videos
+        working-directory: web
         # La etiqueta vincula la imagen al repositorio: sin ella, GitHub Packages
         # rechaza la publicación con GITHUB_TOKEN ("denied").
         run: |
-          docker build --pull -t "$IMAGE:$GITHUB_SHA" \
+          docker build --pull -f server/azure-videos/Dockerfile -t "$IMAGE:$GITHUB_SHA" \
             --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" \
             --label "org.opencontainers.image.description=API de videos de AceCam (PCIT-222)" .
 

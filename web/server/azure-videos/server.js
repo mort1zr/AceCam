@@ -16,7 +16,9 @@ import { getAuth } from 'firebase-admin/auth'
 import { getFirestore } from 'firebase-admin/firestore'
 import { sendResponse, toRequest } from './bridge.js'
 import { createAzureVideoHandler } from './http.js'
+import { createAzureVideoImportStore } from './importStore.js'
 import { createSasSigner } from './sas.js'
+import { createAzureYouTubeImportHandler, YOUTUBE_IMPORT_PATH } from './youtubeImport.js'
 
 function required(name) {
   const value = process.env[name]
@@ -26,20 +28,42 @@ function required(name) {
 
 const account = required('AZURE_STORAGE_ACCOUNT')
 if (!/^[a-z0-9]{3,24}$/.test(account)) throw new Error('AZURE_STORAGE_ACCOUNT no es un nombre de cuenta válido.')
+const projectId = required('FIREBASE_PROJECT_ID')
+const origin = required('ALLOWED_ORIGIN')
 const firebase = initializeApp({
   credential: cert(JSON.parse(required('FIREBASE_SERVICE_ACCOUNT'))),
-  projectId: required('FIREBASE_PROJECT_ID'),
+  projectId,
 })
 const serviceClient = new BlobServiceClient(
   `https://${account}.blob.core.windows.net`,
   new DefaultAzureCredential({ managedIdentityClientId: process.env.AZURE_CLIENT_ID }),
 )
+const container = process.env.AZURE_STORAGE_CONTAINER || 'videos'
+const verifyIdToken = token => getAuth(firebase).verifyIdToken(token)
 const handler = createAzureVideoHandler({
-  verifyIdToken: token => getAuth(firebase).verifyIdToken(token),
+  verifyIdToken,
   db: getFirestore(firebase),
-  signer: createSasSigner({ serviceClient, container: process.env.AZURE_STORAGE_CONTAINER || 'videos' }),
-  origin: required('ALLOWED_ORIGIN'),
+  signer: createSasSigner({ serviceClient, container }),
+  origin,
 })
+
+let handleYouTube
+if (process.env.ACECAM_YOUTUBE_IMPORT_ENABLED === 'true') {
+  const importApp = initializeApp({
+    credential: cert(JSON.parse(required('FIREBASE_SERVICE_ACCOUNT_YOUTUBE_IMPORT'))),
+    projectId,
+  }, 'youtube-import')
+  const db = getFirestore(importApp)
+  handleYouTube = createAzureYouTubeImportHandler({
+    origin,
+    requestOrigin: 'http://localhost',
+    verifyIdToken,
+    db,
+    store: createAzureVideoImportStore({ db, container: serviceClient.getContainerClient(container) }),
+    ytDlp: required('ACECAM_YT_DLP'),
+    ffprobe: required('ACECAM_FFPROBE'),
+  })
+}
 
 createServer(async (incoming, outgoing) => {
   const started = Date.now()
@@ -50,15 +74,23 @@ createServer(async (incoming, outgoing) => {
       outgoing.writeHead(200, { 'Content-Type': 'text/plain' }).end('ok')
       return
     }
-    const request = await toRequest(incoming)
+    const isYouTube = incoming.url?.split('?')[0] === YOUTUBE_IMPORT_PATH
+    if (isYouTube && !handleYouTube) {
+      status = 404
+      outgoing.writeHead(status).end()
+      return
+    }
+    const controller = new AbortController()
+    outgoing.once('close', () => { if (!outgoing.writableEnded) controller.abort() })
+    const request = await toRequest(incoming, { maxBytes: isYouTube ? 8192 : undefined, signal: controller.signal })
     if (!request) {
       status = 413
       outgoing.writeHead(413).end()
       return
     }
-    const response = await handler(request)
+    const response = await (isYouTube ? handleYouTube : handler)(request)
     status = response.status
-    await sendResponse(outgoing, response)
+    if (!outgoing.destroyed) await sendResponse(outgoing, response)
   } catch (error) {
     console.error(`Error en la API de videos: ${error?.message}`)
     if (!outgoing.headersSent) outgoing.writeHead(500, { 'Content-Type': 'application/json' }).end('{"error":"interno"}')
