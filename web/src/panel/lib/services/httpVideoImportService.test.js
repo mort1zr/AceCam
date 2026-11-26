@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { createHttpVideoImporter } from './httpVideoImportService.js'
+import { createAzureYouTubeVideoImporter, createHttpVideoImporter } from './httpVideoImportService.js'
 import { analysisErrorMessage } from '../analysis.js'
 
 const origin = 'https://acecam.example'
@@ -22,6 +22,21 @@ describe('Adaptador de navegador para importar video', () => {
     expect(createHttpVideoImporter()).toBeUndefined()
     expect(() => setup({ endpoint: 'https://attacker.example/import' })).toThrow()
     expect(() => setup({ endpoint: 'https://user:password@acecam.example/import' })).toThrow()
+  })
+
+  it('envía la sesión solo a la ruta fija de YouTube en la API de Azure configurada', async () => {
+    const { getSession, fetcher } = setup()
+    const apiUrl = 'https://azure-videos.example'
+    expect(createAzureYouTubeVideoImporter({ apiUrl })).toBeUndefined()
+    expect(createAzureYouTubeVideoImporter({ enabled: true })).toBeUndefined()
+    expect(() => createAzureYouTubeVideoImporter({ enabled: true, apiUrl: 'http://azure-videos.example' })).toThrow()
+    const importer = createAzureYouTubeVideoImporter({ enabled: true, apiUrl, origin, getSession, fetcher })
+    expect(importer.supportsYouTube).toBe(true)
+    expect(importer.youtubeOnly).toBe(true)
+    await importer(input)
+    expect(fetcher).toHaveBeenCalledWith(`${apiUrl}/api/videos/import-youtube`, expect.objectContaining({
+      mode: 'cors', redirect: 'error', credentials: 'omit', headers: expect.objectContaining({ Authorization: 'Bearer verified-token' }),
+    }))
   })
 
   it('envía solo URL e ID con token de la sesión y bloquea redirecciones', async () => {

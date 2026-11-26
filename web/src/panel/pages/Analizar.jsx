@@ -5,6 +5,7 @@ import { usePlanVista } from '../context/PlanVistaContext.js'
 import { MATCH_STATUS } from '../lib/schema.js'
 import { quotaLow, quotaReached, remainingAnalyses } from '../lib/usage.js'
 import AnalysisForm from '../components/analysis/AnalysisForm.jsx'
+import TennisProgress from '../components/analysis/TennisProgress.jsx'
 import PlayerForm from '../components/players/PlayerForm.jsx'
 import { usePlayers } from '../hooks/usePlayers.js'
 import { useAnalysisQueue } from '../hooks/useAnalysisQueue.js'
@@ -78,17 +79,20 @@ function ProcessingProgress({ match, playerName }) {
 
   return (
     <div className="analysis-processing">
-      {percent !== null
-        ? <progress className="analysis-processing-frames" aria-label={label} max={100} value={percent} />
-        : <div className="analysis-processing-bar" role="progressbar" aria-label={label} />}
-      {percent !== null && <strong className="analysis-processing-percent">{percent} %{remaining && ` · ${remaining}`}</strong>}
-      <span aria-live="polite">
-        {processingLabels.get(match.analysisStage) ?? processingLabels.get('analyzing')}
-      </span>
-      {hasFrames && <span>{done} de {total} fotogramas en esta etapa</span>}
-      {elapsed !== null && (
-        <span>Tiempo transcurrido: {elapsed >= 60 ? `${Math.floor(elapsed / 60)} min ` : ''}{elapsed % 60} s</span>
+      <div className="analysis-progress-heading">
+        <span role="status">{processingLabels.get(match.analysisStage) ?? processingLabels.get('analyzing')}</span>
+        {percent !== null && <strong className="analysis-progress-value">{percent} %</strong>}
+      </div>
+      <TennisProgress label={label} value={percent} />
+      {(hasFrames || elapsed !== null) && (
+        <dl className="analysis-progress-details">
+          {hasFrames && <div><dt>Fotogramas de la etapa</dt><dd>{done} de {total}</dd></div>}
+          {elapsed !== null && (
+            <div><dt>Tiempo transcurrido</dt><dd>{elapsed >= 60 ? `${Math.floor(elapsed / 60)} min ` : ''}{elapsed % 60} s</dd></div>
+          )}
+        </dl>
       )}
+      {remaining && <p className="analysis-progress-estimate">{remaining}</p>}
     </div>
   )
 }

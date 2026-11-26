@@ -82,9 +82,9 @@ En la app, inicia sesión con un entrenador de prueba con plan ficticio local,
 da de alta un jugador y abre
 **Analizar video**. La opción **Usar enlace** admite un MP4/MOV público directo
 alojado en `raw.githubusercontent.com` o un enlace público de YouTube que
-ofrezca un MP4 HTTPS compatible. El límite local para enlaces es de 24 MiB y 30 s,
-con una importación a la vez. La API verifica la sesión, inspecciona el archivo
-y devuelve la ruta de Storage antes de encolar el partido. Un enlace de tenis
+ofrezca un MP4 HTTPS compatible. La importación admite hasta 24 MiB por video,
+sin tope de duración y con una importación a la vez. La API verifica la sesión,
+inspecciona el archivo y devuelve la ruta de Storage antes de encolar el partido. Un enlace de tenis
 para verificar el Dashboard es
 [el video de ejemplo del modelo](https://raw.githubusercontent.com/abdullahtarek/tennis_analysis/main/input_videos/input_video.mp4).
 Si usas un clip ajeno al tenis, puedes comprobar la importación y la cola, y el

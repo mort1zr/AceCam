@@ -28,7 +28,7 @@ export async function canAccessVideo({ db, uid, path, operation, uploadedBy }) {
   if (operation === 'upload' && !(target.fileName in UPLOAD_TYPES)) return false
 
   const user = (await db.doc(`users/${uid}`).get()).data()
-  if (!user || user.orgId !== target.orgId || !['admin', 'coach'].includes(user.role)) return false
+  if (!user || user.suspended === true || user.orgId !== target.orgId || !['admin', 'coach'].includes(user.role)) return false
   if (user.role === 'admin') return true
 
   const match = await db.doc(`matches/${target.matchId}`).get()

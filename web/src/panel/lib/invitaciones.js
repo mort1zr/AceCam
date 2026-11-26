@@ -3,10 +3,11 @@
 // así la persona invitada la encuentra al registrarse sin poder listar las de otros.
 // El plan Spark no envía correos: quien invita comparte el enlace de registro.
 
-import { deleteDoc, doc, serverTimestamp, setDoc } from 'firebase/firestore'
+import { deleteDoc, doc, serverTimestamp, setDoc, writeBatch } from 'firebase/firestore'
 import { COLLECTIONS, INVITE_STATUS, ROLES } from './schema.js'
+import { recordPlatformChange } from './services/platformAudit.js'
 
-const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+const EMAIL_PATTERN = /^[^\s@/]+@[^\s@/]+\.[^\s@/]+$/
 
 export const normalizarCorreo = (correo) => String(correo ?? '').trim().toLowerCase()
 
@@ -35,6 +36,24 @@ export async function invitarMiembro({ db, orgId, uid, email, role = 'coach' }) 
     invitedBy: uid,
     createdAt: serverTimestamp(),
   })
+  return correo
+}
+
+/** Guarda una invitación de plataforma y su auditoría en la misma transacción. */
+export async function invitarDesdePlataforma({ db, orgId, uid, email, role }) {
+  const error = validarInvitacion({ email, role })
+  if (error) throw Object.assign(new Error(error), { code: 'invite/invalid' })
+  const correo = normalizarCorreo(email)
+  const reference = invitacionRef(db, correo)
+  const batch = writeBatch(db)
+  const after = { orgId, role, status: INVITE_STATUS.pending }
+  const platformAuditId = recordPlatformChange(db, batch, {
+    actorId: uid, entity: 'invites', targetId: correo, before: null, after,
+  })
+  batch.set(reference, {
+    ...after, email: correo, invitedBy: uid, createdAt: serverTimestamp(), platformAuditId,
+  })
+  await batch.commit()
   return correo
 }
 

@@ -2,7 +2,8 @@ import { useEffect, useId, useRef, useState } from 'react'
 import { SegmentedControl } from '../ui'
 import { analysisErrorMessage, formatBytes, validateAnalysis } from '../../lib/analysis.js'
 import { validateLocalVideo } from '../../lib/validateLocalVideo.js'
-import { MAX_VIDEO_FPS, MAX_VIDEO_SECONDS, MIN_VIDEO_FPS, MIN_VIDEO_HEIGHT, MIN_VIDEO_WIDTH } from '../../lib/videoRequirements.js'
+import { MAX_VIDEO_FPS, MIN_VIDEO_FPS, MIN_VIDEO_HEIGHT, MIN_VIDEO_WIDTH } from '../../lib/videoRequirements.js'
+import TennisProgress from './TennisProgress.jsx'
 
 const initial = { sourceType: 'file', file: null, url: '', playerPosition: '', opponent: '', tournament: '', matchDate: '', result: '' }
 
@@ -14,6 +15,13 @@ export default function AnalysisForm({ service, players, playersLoading, players
   const [success, setSuccess] = useState('')
   const [busy, setBusy] = useState(false)
   const [progress, setProgress] = useState({ phase: 'idle', percent: 0 })
+  const checking = progress.phase === 'checking'
+  const saving = progress.phase === 'saving'
+  const importing = values.sourceType === 'link'
+  const transferTitle = checking ? 'Verificando el video…' : saving ? 'Guardando partido…' : importing ? 'Importando video…' : 'Cargando video…'
+  const transferPercent = checking || (importing && progress.percent === 0) ? null : Math.round(progress.percent)
+  const linkSource = service.youtubeOnly ? 'Enlace a un video público de YouTube.' : service.supportsYouTube
+    ? 'Video público de YouTube o enlace directo a MP4/MOV.' : 'Enlace público directo a MP4 o MOV.'
   const request = useRef(null)
   const controller = useRef(null)
   const active = useRef(false)
@@ -139,7 +147,7 @@ export default function AnalysisForm({ service, players, playersLoading, players
               <label htmlFor={`${id}-file`}>Selecciona el video del partido</label>
               <p>Arrastra el archivo aquí o elígelo desde tu equipo{limit}.</p>
               <p id={`${id}-file-requirements`}>
-                MP4 o MOV de hasta {MAX_VIDEO_SECONDS / 60} minuto, con un mínimo de 720p ({MIN_VIDEO_WIDTH}×{MIN_VIDEO_HEIGHT}) y de {MIN_VIDEO_FPS} a {MAX_VIDEO_FPS} FPS.
+                MP4 o MOV sin tope de duración, con un mínimo de 720p ({MIN_VIDEO_WIDTH}×{MIN_VIDEO_HEIGHT}) y de {MIN_VIDEO_FPS} a {MAX_VIDEO_FPS} FPS.
                 {' '}Recomendamos 1080p a 30 FPS. Graba con cámara fija detrás de la línea de fondo, con toda la cancha visible y sin cortes.
               </p>
               <label htmlFor={`${id}-file`} className="analysis-file-button">Elegir archivo</label>
@@ -148,7 +156,7 @@ export default function AnalysisForm({ service, players, playersLoading, players
               {fieldError('file')}
             </div>
           ) : (
-            <div className="players-field analysis-url"><label htmlFor={`${id}-url`}>Enlace del video *</label><input id={`${id}-url`} type="url" name="url" value={values.url} onChange={update} placeholder={service.supportsYouTube ? 'https://youtu.be/abcdefghijk' : 'https://ejemplo.com/partido.mp4'} {...invalid('url')} /><p>{service.supportsYouTube ? 'Video público de YouTube o enlace directo a MP4/MOV.' : 'Enlace público directo a MP4 o MOV.'} {service.mode === 'demo' ? 'En esta demostración solo se valida el enlace; no se descarga ningún video.' : 'Se comprobará su formato y tamaño antes de añadirlo a la cola.'}</p>{fieldError('url')}</div>
+            <div className="players-field analysis-url"><label htmlFor={`${id}-url`}>Enlace del video *</label><input id={`${id}-url`} type="url" name="url" value={values.url} onChange={update} placeholder={service.supportsYouTube ? 'https://youtu.be/abcdefghijk' : 'https://ejemplo.com/partido.mp4'} {...invalid('url')} /><p>{linkSource} {service.mode === 'demo' ? 'En esta demostración solo se valida el enlace; no se descarga ningún video.' : 'Se comprobará su formato y tamaño antes de añadirlo a la cola.'}</p>{fieldError('url')}</div>
           )}
           {!service.supportsLinks && <p className="analysis-muted">La importación por enlace aún no está disponible. Puedes usar un archivo.</p>}
         </section>
@@ -199,17 +207,15 @@ export default function AnalysisForm({ service, players, playersLoading, players
       </fieldset>
       {busy && (
         <div className="analysis-progress">
-          <div role="status">
-            {progress.phase === 'checking' ? <p>Verificando resolución y duración…</p> : (
-              <>
-                <p>{progress.phase === 'saving' ? 'Guardando partido…' : 'Cargando video…'}</p>
-                <progress aria-label="Progreso de carga" max={100} value={progress.percent} />
-                <span>{Math.round(progress.percent)} %</span>
-              </>
-            )}
+          <div className="analysis-progress-body">
+            <div className="analysis-progress-heading">
+              <span role="status">{transferTitle}</span>
+              {transferPercent !== null && <strong className="analysis-progress-value">{transferPercent} %</strong>}
+            </div>
+            <TennisProgress label={checking ? 'Verificación del video' : 'Progreso de carga'} value={transferPercent} />
           </div>
-          <button type="button" className="players-button-secondary" disabled={progress.phase === 'saving'} onClick={() => controller.current?.abort()}>
-            {progress.phase === 'checking' ? 'Cancelar verificación' : 'Cancelar carga'}
+          <button type="button" className="players-button-secondary" disabled={saving} onClick={() => controller.current?.abort()}>
+            {checking ? 'Cancelar verificación' : 'Cancelar carga'}
           </button>
         </div>
       )}

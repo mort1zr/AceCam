@@ -37,7 +37,7 @@ y un **archivo o carpeta de Google Drive**.
 | **Memoria del modelo** | Desde PCIT-146 el vídeo se procesa fotograma a fotograma: la memoria **no depende de la duración**. Antes, un vídeo de más de ~1 min a 1080p agotaba la RAM. |
 | **Velocidad del modelo** | Medida en un PC sin GPU con el detector por defecto, `yolov8m`: **~12 min de proceso por cada minuto de vídeo**. Con `yolov8x` eran ~19 min. Con GPU (T4) se estima ~1–1,5 h por hora de partido (por confirmar en Colab). |
 | **Resolución mínima en el worker** | `worker.min_resolution` en `model/config.yaml` fija 720 píxeles para el lado corto y 1280 para el largo. Si falta alguno de los mínimos, el partido pasa a `error` antes de analizarlo. |
-| **Límite de duración en el worker** | `worker.max_duration_seconds` en `model/config.yaml` (hoy **60 s**). Si un vídeo lo supera, el partido pasa a `error` con un mensaje para el usuario, antes de analizarlo. |
+| **Duración en el worker** | `worker.max_duration_seconds: 0` en `model/config.yaml`. Los videos se procesan por tramos sin un tope de duración predeterminado. |
 | **Límite de tamaño** | **500 MB** en `MAX_VIDEO_BYTES` (`web/src/panel/lib/videoUpload.js`) y en `firebase/storage.rules`. |
 | **Subida de archivos** | Un archivo por partido (PCIT-27). |
 | **Importación por enlace** | Núcleo de servidor preparado y probado (`web/server/video-import/`, PCIT-134 y PCIT-141): enlaces directos MP4/MOV y proveedor de YouTube con `yt-dlp`. **Desactivado**, a falta de alojamiento, Auth, Storage, `ffprobe` y `yt-dlp` reales. |
@@ -67,21 +67,17 @@ y un **archivo o carpeta de Google Drive**.
 
 ## Cambios
 
-### A. Límite de duración, tamaño y resolución unificados (Fabian, Axel, Aaron)
+### A. Tamaño y resolución unificados (Fabian, Axel, Aaron)
 
-**Problema:** hoy el worker corta en 60 s, la web no comprueba la duración y el tamaño máximo es
-de 500 MB. A 1080p, un móvil graba unos **60–100 MB por minuto**, así que 500 MB son unos
+**Problema:** el tamaño máximo de carga directa es de 500 MiB.
+A 1080p, un móvil graba unos **60–100 MB por minuto**, así que el tope admite unos
 **5–8 minutos**. Con eso no entra un partido completo.
 
 **Cambio:**
 
 | Dónde | Qué | Responsable |
 | --- | --- | --- |
-| `web/src/panel/lib/schema.js` | Nueva constante `MAX_VIDEO_SECONDS`, única fuente para la web | Axel |
 | `web/src/panel/lib/videoUpload.js` y `firebase/storage.rules` | Subir `MAX_VIDEO_BYTES` al valor acordado, **en los dos a la vez**, con sus tests de reglas | Axel |
-| Analizar (PCIT-27) y Postulación (PCIT-54) | Leer la duración en el navegador (`<video>` + `loadedmetadata`) y rechazar los que superen `MAX_VIDEO_SECONDS`, con el mensaje de PCIT-147 | Fabian (Analizar) y Axel (Postulación) |
-| `web/server/video-import/` | Tras `ffprobe`, rechazar por duración con el mismo límite (nuevo código `import/too-long`) | Fabian |
-| `model/config.yaml` | `worker.max_duration_seconds` con el mismo valor | Aaron |
 | `web/src/panel/lib/videoRequirements.js` | Mínimo de 1280 píxeles en el lado largo y 720 en el corto | Axel |
 | Analizar y Postulación | Leer `videoWidth` y `videoHeight` en el navegador (mismo `loadedmetadata`) y rechazar si uno de los lados queda por debajo de su mínimo | Fabian y Axel |
 | `web/server/video-import/` | Tras `ffprobe`, rechazar con el mismo mínimo (nuevo código `import/low-resolution`). En YouTube, pedir un formato de 720p o más: si no se elige, muchos vídeos llegan a 360p | Fabian |
@@ -101,27 +97,26 @@ Mensaje si no llega al mínimo: *"El video debe tener al menos 720p (1280×720).
 Grábalo o expórtalo en 720p o 1080p."* Analizar video y el worker aplican la
 misma regla a archivos horizontales y verticales.
 
-**Valores propuestos (pendientes de acordar):**
+**Tamaños propuestos (pendientes de acordar):**
 
-| Fase | Duración máxima | Tamaño máximo | Cuándo |
-| --- | --- | --- | --- |
-| 1. Worker en CPU o Colab | 15 min | 1,5 GB | Al terminar PCIT-146 |
-| 2. Worker con GPU (cambio G) | 3 h | 15 GB | Cuando el worker corra en una máquina con GPU |
+| Fase | Tamaño máximo | Cuándo |
+| --- | --- | --- |
+| 1. Worker en CPU o Colab | 1,5 GB | Al terminar PCIT-146 |
+| 2. Worker con GPU (cambio G) | 15 GB | Cuando el worker corra en una máquina con GPU |
 
 **Texto de requisitos (sustituye al de PCIT-147):**
 
 - cámara fija detrás de la línea de fondo, con la pista completa a la vista;
 - sin montaje ni música; si es una transmisión de TV, las repeticiones se descartan solas
   (cuando esté PCIT-59);
-- hasta **{MAX_VIDEO_SECONDS en texto}** y **{MAX_VIDEO_BYTES en texto}**;
+- sin tope de duración, con el límite de tamaño indicado en cada formulario;
 - MP4 o MOV, **mínimo 720p** (1280×720), recomendado 1080p; de 25 a 60 fps.
 
 **Criterios de aceptación:**
 
-- web, servidor de importación y worker rechazan un vídeo de duración máxima + 1 s, cada uno con
-  un mensaje apto para el usuario;
+- web, servidor y worker admiten videos de más de 60 segundos cuando cumplen los requisitos de carga;
 - los tres rechazan un vídeo de 640×360 y aceptan uno de 1280×720 y uno vertical de 720×1280;
-- cambiar el límite exige tocar **un solo valor por capa**.
+- cambiar el límite de tamaño exige tocar **un solo valor por capa**.
 
 ### B. Subir varios vídeos a la vez (Fabian)
 

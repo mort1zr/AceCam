@@ -1,9 +1,9 @@
-export default function PelotaTitulo() {
+export default function PelotaTitulo({ className = 'ml-[0.08em] inline-block size-[0.3em] align-baseline' } = {}) {
   return (
     <svg
       aria-hidden="true"
       viewBox="0 0 30 30"
-      className="ml-[0.08em] inline-block size-[0.3em] align-baseline"
+      className={className}
     >
       <circle
         cx="15"

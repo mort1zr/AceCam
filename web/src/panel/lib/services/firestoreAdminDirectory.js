@@ -7,19 +7,21 @@ export async function loadAdminDirectory(db, period = usagePeriod()) {
     getDocsFromServer(collection(db, COLLECTIONS.orgs)),
     getDocsFromServer(collection(db, COLLECTIONS.users)),
   ])
-  const organizationNames = new Map(organizations.docs.map(doc => [doc.id, doc.data().name]))
+  const teams = new Map(organizations.docs.map(doc => [doc.id, doc.data()]))
   const members = new Map()
   const userRows = users.docs.map(doc => {
-    const { email, orgId, role, createdAt } = doc.data()
+    const { email, orgId, role, createdAt, suspended } = doc.data()
     members.set(orgId, (members.get(orgId) ?? 0) + 1)
-    return { id: doc.id, email, organization: organizationNames.get(orgId) || orgId, role, createdAt }
+    const team = teams.get(orgId)
+    return { id: doc.id, email, organization: team?.name || orgId, role, createdAt, suspended: suspended === true,
+      editable: Boolean(team) && team.ownerId !== doc.id }
   })
   const organizationRows = await Promise.all(organizations.docs.map(async doc => {
-    const { name, plan } = doc.data()
+    const { name, plan, archived } = doc.data()
     const usage = await getDocFromServer(usageRef(db, doc.id, period))
     const analyses = usage.data()?.analyses
     return {
-      id: doc.id, name: name || doc.id, plan, members: members.get(doc.id) ?? 0,
+      id: doc.id, name: name || doc.id, plan, archived: archived === true, members: members.get(doc.id) ?? 0,
       analyses: usage.exists() ? (Number.isSafeInteger(analyses) && analyses >= 0 ? analyses : null) : 0,
     }
   }))

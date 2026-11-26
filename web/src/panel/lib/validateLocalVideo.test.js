@@ -3,7 +3,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { validateLocalVideo } from './validateLocalVideo.js'
 
 const LOW = 'El video debe tener al menos 720p (1280×720). Grábalo o expórtalo en 720p o 1080p.'
-const LONG = 'El análisis admite videos de hasta 1 minuto. Recorta el video y vuelve a subirlo.'
 const UNKNOWN = 'No se pudo verificar el video. Elige un archivo MP4 o MOV que tu navegador pueda abrir.'
 
 function setup() {
@@ -33,7 +32,8 @@ describe('Metadatos del video local', () => {
     [640, 360, 20, LOW],
     [1279, 720, 20, LOW],
     [1280, 719, 20, LOW],
-    [1920, 1080, 60.01, LONG],
+    [1920, 1080, 60.01, null],
+    [1920, 1080, 600, null],
     [0, 0, 20, UNKNOWN],
     [1280, 720, Infinity, UNKNOWN],
   ])('valida dimensiones %i×%i y duración %s', async (width, height, duration, expected) => {

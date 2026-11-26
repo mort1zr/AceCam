@@ -5,7 +5,7 @@ import { formatBytes, validateVideoFile } from '../../panel/lib/analysis.js'
 import { requiresPlayerGuardian } from '../../panel/lib/players.js'
 import { applicationReference, publicFormExists, submitPublicApplication } from '../../panel/lib/publicApplications.js'
 import { validateLocalVideo } from '../../panel/lib/validateLocalVideo.js'
-import { MAX_VIDEO_FPS, MAX_VIDEO_SECONDS, MIN_VIDEO_FPS, MIN_VIDEO_HEIGHT, MIN_VIDEO_WIDTH } from '../../panel/lib/videoRequirements.js'
+import { MAX_VIDEO_FPS, MIN_VIDEO_FPS, MIN_VIDEO_HEIGHT, MIN_VIDEO_WIDTH } from '../../panel/lib/videoRequirements.js'
 import { MAX_VIDEO_BYTES } from '../../panel/lib/videoUpload.js'
 
 const personalFields = [
@@ -102,7 +102,7 @@ function VideoField({ onChange }) {
     <div className="sm:col-span-2">
       <label className={labelClass} htmlFor="application-video">Video (opcional)</label>
       <p className="mb-2 text-sm text-muted" id="application-video-requirements">
-        MP4 o MOV de hasta {MAX_VIDEO_SECONDS / 60} minuto y {formatBytes(MAX_VIDEO_BYTES)}.
+        MP4 o MOV de hasta {formatBytes(MAX_VIDEO_BYTES)}, sin tope de duración.
         {' '}Mínimo {MIN_VIDEO_WIDTH}×{MIN_VIDEO_HEIGHT} y de {MIN_VIDEO_FPS} a {MAX_VIDEO_FPS} FPS.
         {' '}Recomendamos 1080p a 30 FPS, con cámara fija detrás de la línea de fondo, cancha completa y sin cortes.
       </p>
