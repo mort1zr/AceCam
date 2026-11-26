@@ -15,7 +15,9 @@ afterAll(async () => env?.cleanup())
 
 // org-a: owner (coach dueño), admin y coach; org-b: otro dueño.
 const miembros = [['owner', 'coach', 'org-a'], ['admin', 'admin', 'org-a'], ['coach', 'coach', 'org-a'], ['otro', 'coach', 'org-b']]
-const db = (uid, email = `${uid}@ejemplo.test`) => env.authenticatedContext(uid, { email }).firestore()
+// Por defecto con el correo verificado; sinVerificar() es la cuenta recién creada (PCIT-220).
+const db = (uid, email = `${uid}@ejemplo.test`) => env.authenticatedContext(uid, { email, email_verified: true }).firestore()
+const sinVerificar = (uid, email) => env.authenticatedContext(uid, { email, email_verified: false }).firestore()
 const invitacion = (uid, overrides = {}) => ({
   email: 'nueva@ejemplo.test', orgId: 'org-a', role: 'coach', status: 'pendiente', invitedBy: uid, createdAt: serverTimestamp(), ...overrides,
 })
@@ -120,5 +122,40 @@ describe('unirse con la invitación', () => {
   it('un miembro que ya tiene ficha no acepta otra invitación', async () => {
     await invitar('otro', { email: 'coach@ejemplo.test', orgId: 'org-b' })
     await assertFails(unirse(db('coach'), 'coach', 'coach@ejemplo.test', { orgId: 'org-b' }))
+  })
+})
+
+// PCIT-220 (hallazgo R1 de PCIT-217): sin verificar el correo, quien lo conozca podría
+// registrarse antes que la persona invitada y entrar al club con su rol.
+describe('el correo debe estar verificado (PCIT-220)', () => {
+  const unirse = (d, uid, email) => {
+    const batch = writeBatch(d)
+    batch.set(doc(d, 'users', uid), { email, displayName: 'Coach Invitada', orgId: 'org-a', role: 'admin', jobTitle: null, createdAt: serverTimestamp() })
+    batch.update(doc(d, 'invites', email), { status: 'aceptada', acceptedBy: uid, acceptedAt: serverTimestamp() })
+    return batch.commit()
+  }
+
+  beforeEach(() => invitar('owner', { role: 'admin' }))
+
+  it('con el correo sin verificar no lee ni acepta la invitación', async () => {
+    const d = sinVerificar('impostor', 'nueva@ejemplo.test')
+    await assertFails(getDoc(doc(d, 'invites', 'nueva@ejemplo.test')))
+    await assertFails(unirse(d, 'impostor', 'nueva@ejemplo.test'))
+  })
+
+  it('un token sin el dato de verificación tampoco basta', async () => {
+    const d = env.authenticatedContext('impostor', { email: 'nueva@ejemplo.test' }).firestore()
+    await assertFails(getDoc(doc(d, 'invites', 'nueva@ejemplo.test')))
+    await assertFails(unirse(d, 'impostor', 'nueva@ejemplo.test'))
+  })
+
+  it('tras verificar, el flujo normal sigue funcionando', async () => {
+    const d = db('nueva', 'nueva@ejemplo.test')
+    await assertSucceeds(getDoc(doc(d, 'invites', 'nueva@ejemplo.test')))
+    await assertSucceeds(unirse(d, 'nueva', 'nueva@ejemplo.test'))
+  })
+
+  it('quien invita sigue viendo la invitación sin depender de esto', async () => {
+    await assertSucceeds(getDoc(doc(env.authenticatedContext('admin', { email: 'admin@ejemplo.test', email_verified: false }).firestore(), 'invites', 'nueva@ejemplo.test')))
   })
 })

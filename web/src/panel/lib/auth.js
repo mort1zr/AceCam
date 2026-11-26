@@ -6,6 +6,7 @@
 import {
   createUserWithEmailAndPassword,
   deleteUser,
+  reload,
   sendEmailVerification,
   signInWithEmailAndPassword,
   signOut,
@@ -71,6 +72,9 @@ const ERROR_MESSAGES = {
   'auth/too-many-requests': 'Demasiados intentos. Espera unos minutos e inténtalo de nuevo.',
   'auth/network-request-failed': 'No hay conexión con el servidor. Revisa tu internet.',
   'permission-denied': 'No pudimos crear tu organización. Inténtalo de nuevo.',
+  'auth/email-not-verified':
+    'Todavía no verificaste tu correo. Abre el enlace que te enviamos y vuelve a intentarlo.',
+  'auth/no-session': 'Tu sesión terminó. Inicia sesión de nuevo.',
   'invite/not-found':
     'No encontramos una invitación pendiente para este correo. Pide que te inviten de nuevo o crea tu propia organización.',
   'invite/verify-email':
@@ -110,25 +114,28 @@ export function createAuthService({ auth, db }) {
     return { user, orgId: invite.orgId, joined: true }
   }
 
+  const verificationSettings = continueUrl => (continueUrl ? { url: continueUrl } : undefined)
+
   /**
-   * Crea la cuenta y su ficha en users. Si su correo tiene una invitación pendiente,
-   * se une a esa organización con el rol invitado (PCIT-40); si no, crea la suya.
+   * Crea la cuenta y su ficha en users, con su propia organización.
+   * Con `invited` (enlace de invitación, PCIT-40) solo crea la cuenta y envía el correo de
+   * verificación: las reglas no dejan leer ni aceptar la invitación hasta verificarlo
+   * (PCIT-220). La unión al club la termina completeInvitedSignup().
    * La organización y la ficha van en el mismo lote, como exigen las reglas.
    * Si algo falla, borra la cuenta de Auth para que pueda volver a intentarlo.
    */
-  async function registerCoach({ name, email, password, orgName, invited = false }) {
+  async function registerCoach({ name, email, password, orgName, invited = false, continueUrl }) {
     const displayName = clean(name)
     const { user } = await createUserWithEmailAndPassword(auth, normalizeEmail(email), password)
     try {
       await updateProfile(user, { displayName })
-      const invite = await pendingInvite(user)
-      if (invite?.platformAuditId && !user.emailVerified) {
-        await sendEmailVerification(user)
-        await signOut(auth)
-        return { verificationPending: true }
+      // Con el enlace de invitación solo se crea la cuenta y se envía el correo de verificación:
+      // las reglas no dejan leer ni aceptar la invitación sin el correo verificado (PCIT-220).
+      // La unión al club la terminan completeInvitedSignup() o el inicio de sesión.
+      if (invited) {
+        await sendEmailVerification(user, verificationSettings(continueUrl))
+        return { user, orgId: null, joined: false, verificationPending: true }
       }
-      if (invite) return await joinInvitedOrg(user, displayName, invite)
-      if (invited) throw Object.assign(new Error('Invite not found'), { code: 'invite/not-found' })
       const orgRef = doc(collection(db, COLLECTIONS.orgs))
       const batch = writeBatch(db)
       batch.set(orgRef, {
@@ -154,17 +161,20 @@ export function createAuthService({ auth, db }) {
     }
   }
 
+  /**
+   * Inicia sesión. Si la cuenta todavía no tiene ficha y ya verificó su correo, se une a la
+   * invitación pendiente (de un club o de la plataforma, PCIT-236). Sin verificar, la sesión
+   * sigue y RequireAuth muestra "Verifica tu correo" (PCIT-220).
+   */
   async function login({ email, password }) {
     const credentials = await signInWithEmailAndPassword(auth, normalizeEmail(email), password)
     const { user } = credentials
     try {
       const profile = await getDoc(doc(db, COLLECTIONS.users, user.uid))
-      if (!profile.exists()) {
+      if (!profile.exists() && user.emailVerified) {
+        await user.getIdToken(true)
         const invite = await pendingInvite(user)
-        if (invite?.platformAuditId) {
-          if (!user.emailVerified) throw Object.assign(new Error('Email verification required'), { code: 'invite/verify-email' })
-          await joinInvitedOrg(user, clean(user.displayName).slice(0, MAX_TEXT_LENGTH) || 'Miembro del equipo', invite)
-        }
+        if (invite) await joinInvitedOrg(user, clean(user.displayName).slice(0, MAX_TEXT_LENGTH) || 'Miembro del equipo', invite)
       }
       return credentials
     } catch (error) {
@@ -173,7 +183,33 @@ export function createAuthService({ auth, db }) {
     }
   }
 
+  /**
+   * Termina el registro por invitación cuando el correo ya está verificado (PCIT-220).
+   * Renueva el token para que lleve email_verified y se une al club en un lote.
+   * Si no hay invitación pendiente, borra la cuenta para que pueda registrarse de nuevo.
+   */
+  async function completeInvitedSignup() {
+    const user = auth.currentUser
+    if (!user) throw Object.assign(new Error('No session'), { code: 'auth/no-session' })
+    await reload(user)
+    if (!user.emailVerified) throw Object.assign(new Error('Email not verified'), { code: 'auth/email-not-verified' })
+    await user.getIdToken(true)
+    const invite = await pendingInvite(user)
+    if (!invite) {
+      await deleteUser(user).catch(() => signOut(auth))
+      throw Object.assign(new Error('Invite not found'), { code: 'invite/not-found' })
+    }
+    return joinInvitedOrg(user, clean(user.displayName).slice(0, MAX_TEXT_LENGTH) || user.email, invite)
+  }
+
+  /** Vuelve a enviar el correo de verificación a la cuenta con sesión. */
+  async function resendVerification({ continueUrl } = {}) {
+    const user = auth.currentUser
+    if (!user) throw Object.assign(new Error('No session'), { code: 'auth/no-session' })
+    await sendEmailVerification(user, verificationSettings(continueUrl))
+  }
+
   const logout = () => signOut(auth)
 
-  return { registerCoach, login, logout }
+  return { registerCoach, completeInvitedSignup, resendVerification, login, logout }
 }
