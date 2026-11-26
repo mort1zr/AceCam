@@ -3,13 +3,15 @@ import { addDoc, deleteDoc, doc, getDoc, onSnapshot, serverTimestamp } from 'fir
 import { applicationForms, publicApplicationPath } from '../../lib/publicApplications.js'
 import { COLLECTIONS } from '../../lib/schema.js'
 import './bandeja.css'
+import GoogleFormsIntegration from './GoogleFormsIntegration.jsx'
 
-function Enlaces({ db, orgId }) {
+function Enlaces({ db, orgId, uid }) {
   const [forms, setForms] = useState(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   // PCIT-184: qué enlace se copió (para el aviso) o si el navegador no dejó copiar.
   const [copiado, setCopiado] = useState(null)
+  const [showGoogle, setShowGoogle] = useState(false)
   useEffect(() => onSnapshot(
     applicationForms(db, orgId),
     (snapshot) => setForms(snapshot.docs.map(({ id }) => id)),
@@ -76,6 +78,9 @@ function Enlaces({ db, orgId }) {
         </>
       )}
       {error && <p className="players-field-error" role="alert">{error}</p>}
+      <button type="button" className="players-button-secondary mt-3" aria-expanded={showGoogle}
+        onClick={() => setShowGoogle(open => !open)}>Google Forms y Sheets</button>
+      {showGoogle && <GoogleFormsIntegration db={db} orgId={orgId} uid={uid} />}
     </section>
   )
 }
@@ -91,5 +96,5 @@ export default function EnlacesPostulacion({ db, orgId, uid, role }) {
     )
     return () => { active = false }
   }, [db, orgId, role])
-  return role === 'admin' || ownerId === uid ? <Enlaces db={db} orgId={orgId} /> : null
+  return role === 'admin' || ownerId === uid ? <Enlaces db={db} orgId={orgId} uid={uid} /> : null
 }
