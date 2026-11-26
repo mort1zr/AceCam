@@ -18,6 +18,6 @@ En una verificación con archivos MP4 y `ffprobe` real, la API de postulación a
 
 ## Verificación en el entorno compartido
 
-Firebase Hosting devuelve el HTML de la aplicación en `/api/application-video/…`. El endpoint `/healthz` de la API de Azure responde, pero esa API firma enlaces para videos y todavía carece de la ruta de adjuntos de postulación.
+La API privada de adjuntos de postulación ya está implementada e integrada en `main` (PR #45, PCIT-251). La web utiliza `VITE_APPLICATION_VIDEO_API_URL` para enviar el archivo al servicio `acecam-application-video`. La demo local conserva su adaptador de Firebase Storage.
 
-Para habilitar el adjunto compartido hace falta desplegar el validador de archivos, enlazar su ruta desde la web y configurar una identidad del servicio autorizada para escribir el objeto privado y actualizar la postulación en Firestore. La cuenta de Firestore actual de la API de Azure se configuró para lectura. La prueba final debe comprobar el guardado de un video válido de más de 60 segundos, el rechazo por resolución o FPS antes de adjuntarlo y la lectura privada por parte del equipo autorizado.
+Axel debe confirmar el despliegue y la variable de la web en PCIT-251 y verificar el guardado de un video válido de más de 60 segundos, el rechazo por resolución o FPS antes de adjuntarlo y la lectura privada por parte del equipo autorizado. Las bases locales de duración ya aceptan más de un minuto. Los pasos y límites del servicio están en [PCIT-251](PCIT-251-postulaciones-en-azure.md). PCIT-147 conserva pendiente esta verificación compartida.
