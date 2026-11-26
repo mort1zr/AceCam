@@ -3,6 +3,8 @@ export const MIN_VIDEO_WIDTH = 1280
 export const MIN_VIDEO_HEIGHT = 720
 export const MIN_VIDEO_FPS = 25
 export const MAX_VIDEO_FPS = 60
+export const MAX_VIDEO_DURATION_SECONDS = 600
+export const VIDEO_DURATION_MESSAGE = 'El video debe durar como máximo 10 minutos. Recórtalo o selecciona un video más corto.'
 // Tamaño máximo de un video subido (500 MB). Vive aquí, sin dependencias, para que lo usen
 // también los servicios de Node (PCIT-251) sin cargar el SDK de Firebase del navegador.
 export const MAX_VIDEO_BYTES = 500 * 1024 * 1024

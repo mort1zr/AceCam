@@ -147,7 +147,7 @@ export default function AnalysisForm({ service, players, playersLoading, players
               <label htmlFor={`${id}-file`}>Selecciona el video del partido</label>
               <p>Arrastra el archivo aquí o elígelo desde tu equipo{limit}.</p>
               <p id={`${id}-file-requirements`}>
-                MP4 o MOV sin tope de duración, con un mínimo de 720p ({MIN_VIDEO_WIDTH}×{MIN_VIDEO_HEIGHT}) y de {MIN_VIDEO_FPS} a {MAX_VIDEO_FPS} FPS.
+                MP4 o MOV de hasta 10 minutos, con un mínimo de 720p ({MIN_VIDEO_WIDTH}×{MIN_VIDEO_HEIGHT}) y de {MIN_VIDEO_FPS} a {MAX_VIDEO_FPS} FPS.
                 {' '}Recomendamos 1080p a 30 FPS. Graba con cámara fija detrás de la línea de fondo, con toda la cancha visible y sin cortes.
               </p>
               <label htmlFor={`${id}-file`} className="analysis-file-button">Elegir archivo</label>

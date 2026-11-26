@@ -56,3 +56,7 @@ El worker en GitHub Actions limita los videos a **600 segundos**, y su programac
 No crear nuevamente un Container Apps Job: el worker operativo ya utiliza GitHub Actions. Las tareas de Azure y validación compartida permanecen asignadas a Axel; Fabián entrega las bases locales.
 
 No corresponde marcar todas las historias como Listo hasta contar con la evidencia anterior. Los commits de esta revisión permanecen locales y requieren publicación antes de que Axel pueda desplegarlos.
+
+## Actualización del acuerdo de duración
+
+Fabián acordó un máximo de 10 minutos (600 segundos) por precaución. Se resuelve la decisión pendiente de PCIT-147 sobre duración sin límite. El cambio posterior de interfaz muestra el máximo y valida archivos locales antes de subirlos. El backend conserva su configuración existente. Las verificaciones compartidas de PCIT-249/251 siguen pendientes.
