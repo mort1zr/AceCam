@@ -1,4 +1,4 @@
-import { videoRequirementsError } from './videoRequirements.js'
+import { MAX_VIDEO_DURATION_SECONDS, VIDEO_DURATION_MESSAGE, videoRequirementsError } from './videoRequirements.js'
 
 const UNREADABLE = 'No se pudo verificar el video. Elige un archivo MP4 o MOV que tu navegador pueda abrir.'
 
@@ -37,7 +37,7 @@ export async function validateLocalVideo(file, signal) {
       if (![videoWidth, videoHeight, duration].every((value) => Number.isFinite(value) && value > 0)) {
         finish(UNREADABLE)
       } else {
-        finish(videoRequirementsError({ width: videoWidth, height: videoHeight }))
+        finish(duration > MAX_VIDEO_DURATION_SECONDS ? VIDEO_DURATION_MESSAGE : videoRequirementsError({ width: videoWidth, height: videoHeight }))
       }
     }
     video.onerror = () => finish(UNREADABLE)

@@ -147,17 +147,20 @@ describe('Formulario público de postulación', () => {
     expect(screen.queryByRole('form')).toBeNull()
   })
 
-  it('rechaza baja resolución antes de guardar la postulación o transferir bytes', async () => {
+  it.each([
+    'El video debe tener al menos 720p (1280×720). Grábalo o expórtalo en 720p o 1080p.',
+    'El video debe durar como máximo 10 minutos. Recórtalo o selecciona un video más corto.',
+  ])('rechaza el archivo antes de guardar la postulación o transferir bytes: %s', async message => {
     const user = userEvent.setup()
     vi.stubEnv('MODE', 'demo')
     getDocFromServer.mockResolvedValueOnce({ exists: () => true })
-    const message = 'El video debe tener al menos 720p (1280×720). Grábalo o expórtalo en 720p o 1080p.'
     validateLocalVideo.mockResolvedValueOnce(message)
     const fetchVideo = vi.fn()
     vi.stubGlobal('fetch', fetchVideo)
     renderForm()
     await fill(user, '2000-02-15')
     const video = screen.getByLabelText('Video (opcional)')
+    expect(document.getElementById(video.getAttribute('aria-describedby')).textContent).toContain('máximo de 10 minutos')
     expect(document.getElementById(video.getAttribute('aria-describedby')).textContent).toContain('25 a 60 FPS')
     await user.upload(video, new File(['demo'], 'clip.mp4', { type: 'video/mp4' }))
     await user.click(screen.getByRole('checkbox'))

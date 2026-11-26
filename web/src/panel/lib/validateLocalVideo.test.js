@@ -34,6 +34,7 @@ describe('Metadatos del video local', () => {
     [1280, 719, 20, LOW],
     [1920, 1080, 60.01, null],
     [1920, 1080, 600, null],
+    [1920, 1080, 600.01, 'El video debe durar como máximo 10 minutos. Recórtalo o selecciona un video más corto.'],
     [0, 0, 20, UNKNOWN],
     [1280, 720, Infinity, UNKNOWN],
   ])('valida dimensiones %i×%i y duración %s', async (width, height, duration, expected) => {

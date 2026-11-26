@@ -1,0 +1,15 @@
+**
+!server/
+!server/azure-videos/
+!server/azure-videos/*.js
+!server/azure-videos/package*.json
+!server/azure-videos/requirements-youtube.txt
+!server/video-import/
+!server/video-import/*.js
+!src/
+!src/panel/
+!src/panel/lib/
+!src/panel/lib/planes.js
+!src/panel/lib/videoImportProtocol.js
+!src/panel/lib/videoRequirements.js
+!src/panel/lib/videoSources.js

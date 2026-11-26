@@ -1,7 +1,7 @@
 # PCIT-175 · Aviso de requisitos en Analizar video
 
 En **Analizar video → Subir archivo**, el selector informa los requisitos antes
-de elegir el video. Admite MP4 o MOV sin tope de duración, con un mínimo de 720p
+de elegir el video. Admite MP4 o MOV de hasta 10 minutos, con un mínimo de 720p
 (1280×720) y de 25 a 60 FPS inclusive. Recomienda 1080p a 30 FPS, cámara fija
 detrás de la línea de fondo, cancha completa y juego sin cortes.
 

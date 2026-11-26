@@ -2,6 +2,7 @@
 
 import os
 import stat
+from unittest.mock import patch
 
 import pytest
 from azure.core.exceptions import ResourceNotFoundError
@@ -112,11 +113,16 @@ def test_azure_storage_is_used_when_an_account_is_configured(monkeypatch):
 def test_the_service_account_from_azure_is_written_privately(tmp_path, monkeypatch):
     monkeypatch.setenv("FIREBASE_SERVICE_ACCOUNT", '{"type": "service_account"}')
     monkeypatch.delenv("GOOGLE_APPLICATION_CREDENTIALS", raising=False)
-    use_service_account_from_env(tmp_path)
     path = tmp_path / "service-account.json"
+    with patch("worker.__main__.os.open", wraps=os.open) as create_file:
+        use_service_account_from_env(tmp_path)
+    create_file.assert_called_once_with(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     assert os.environ["GOOGLE_APPLICATION_CREDENTIALS"] == str(path)
     assert path.read_text() == '{"type": "service_account"}'
-    assert stat.S_IMODE(path.stat().st_mode) == 0o600
+    # Windows no representa los permisos de propietario/grupo POSIX mediante stat.
+    # El worker publicado corre en Linux: allí también verificamos el modo efectivo.
+    if os.name != "nt":
+        assert stat.S_IMODE(path.stat().st_mode) == 0o600
 
 
 def test_an_existing_credentials_file_is_kept(tmp_path, monkeypatch):
