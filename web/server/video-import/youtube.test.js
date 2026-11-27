@@ -4,7 +4,7 @@ import { Readable } from 'node:stream'
 import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
-import { createVideoSourceDownloader, createYtDlpResolver, isGoogleVideoUrl, readYouTubeMetadata } from './youtube.js'
+import { createVideoSourceDownloader, createYtDlpResolver, isGoogleVideoUrl, readYouTubeMetadata, youTubeFormat } from './youtube.js'
 
 const id = 'abcdefghijk'
 const url = `https://www.youtube.com/watch?v=${id}`
@@ -35,7 +35,18 @@ describe('Proveedor de YouTube (sin ejecución de extractor ni red externa)', ()
   })
 
   it('rechaza privado, no listado, identificación desconocida y playlists', () => {
-    for (const override of [{ availability: 'private' }, { availability: 'unlisted' }, { availability: null }, { availability: 'needs_auth' }, { id: 'ABCDEFGHIJK' }, { _type: 'playlist' }, { extractor_key: 'Generic' }]) expect(() => readYouTubeMetadata(report(override), id, 100)).toThrow(expect.objectContaining({ code: 'import/youtube-unavailable' }))
+    for (const override of [{ availability: 'private' }, { availability: 'unlisted' }, { availability: 'needs_auth' }, { availability: 'subscriber_only' }, { id: 'ABCDEFGHIJK' }, { _type: 'playlist' }, { extractor_key: 'Generic' }]) expect(() => readYouTubeMetadata(report(override), id, 100)).toThrow(expect.objectContaining({ code: 'import/youtube-unavailable' }))
+  })
+
+  it('acepta un video público cuando YouTube no informa la disponibilidad (consulta sin sesión)', () => {
+    for (const availability of [null, undefined]) expect(readYouTubeMetadata(report({ availability }), id, 100).videoId).toBe(id)
+  })
+
+  it('pide video H.264 MP4 de 720p a 1080p que quepa en el límite, sin el MP4 de 360p con audio', () => {
+    const format = youTubeFormat(25165824)
+    expect(format).toBe('bestvideo[ext=mp4][protocol=https][vcodec^=avc1][height>=720][height<=1080][filesize<=?25165824]/worstvideo[ext=mp4][protocol=https][vcodec^=avc1][height>=720][height<=1080]')
+    expect(format).not.toMatch(/(^|\/)best\[/)
+    expect(() => youTubeFormat(0)).toThrow()
   })
 
   it('rechaza directos/programados, DRM, audio solo y formatos que requieren mezclar archivos', () => {
@@ -62,6 +73,7 @@ describe('Proveedor de YouTube (sin ejecución de extractor ni red externa)', ()
     expect(file).toBe(executable)
     expect(args).toEqual(expect.arrayContaining(['--ignore-config', '--no-plugin-dirs', '--no-cookies', '--no-cookies-from-browser', '--no-remote-components', '--simulate', '--no-playlist']))
     expect(args.at(-1)).toBe(url)
+    expect(args[args.indexOf('--format') + 1]).toBe(youTubeFormat(100))
     expect(args).not.toContain('--no-check-certificates')
     expect(options).toMatchObject({ timeout: 30000, maxBuffer: 2097152, windowsHide: true })
     expect(options.shell).toBeUndefined()
