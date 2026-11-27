@@ -1,6 +1,5 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import TarjetaJugador from '../dashboard/TarjetaJugador.jsx'
-import { usePlayerPhoto } from '../../hooks/usePlayerPhoto.js'
 import { checkPhotoFile, photoErrorMessage } from '../../lib/photoUpload.js'
 
 /** Tarjeta del jugador con la foto de perfil (si tiene) y sus controles de subir/quitar.
@@ -11,7 +10,6 @@ export default function PlayerPhotoCard({ player, metrics, indice, ranking, allo
   const [busy, setBusy] = useState(false)
   const [progress, setProgress] = useState(null)
   const [error, setError] = useState(null)
-  const photo = usePlayerPhoto(photoService, player.id, player.photoPath)
   const canEditPhoto = allowed && Boolean(service.updatePhoto) && Boolean(photoUploadService)
   useEffect(() => { active.current = true; return () => { active.current = false } }, [])
 
@@ -59,7 +57,7 @@ export default function PlayerPhotoCard({ player, metrics, indice, ranking, allo
 
   return (
     <div className="players-profile-carta">
-      <TarjetaJugador player={player} metrics={metrics} indice={indice} ranking={ranking} photoUrl={photo.status === 'ready' ? photo.url : null} />
+      <TarjetaJugador player={player} metrics={metrics} indice={indice} ranking={ranking} photoService={photoService} />
       {canEditPhoto && (
         <div className="players-photo-actions">
           <label htmlFor={`${id}-photo`} className="players-button-secondary">

@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef } from 'react'
 import AvatarTenista from './AvatarTenista.jsx'
 import { useContador } from '../../hooks/useContador.js'
+import { usePlayerPhoto } from '../../hooks/usePlayerPhoto.js'
 import { valoracionJugador } from '../../lib/valoracion.js'
 import './tarjetaJugador.css'
 
@@ -117,8 +118,10 @@ export default function TarjetaJugador({
   indice = 0,
   ranking = null,
   escala = null,
-  photoUrl = null,
+  photoService = null,
 }) {
+  const photo = usePlayerPhoto(photoService, player.id, player.photoPath)
+  const photoUrl = photo.status === 'ready' ? photo.url : null
   const carta = useRef(null)
   const rayos = useRef([])
   const puntero = useRef({ x: 115, y: 120, activo: false, cuadro: 0, ultimo: 0 })

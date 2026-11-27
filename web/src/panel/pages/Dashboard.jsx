@@ -190,7 +190,7 @@ function IndicadoresVacios() {
   )
 }
 
-function ElegirJugador({ players, metricas, onSelect }) {
+function ElegirJugador({ players, metricas, onSelect, photoService }) {
   const carrusel = useArrastre()
   return (
     <section
@@ -234,6 +234,7 @@ function ElegirJugador({ players, metricas, onSelect }) {
                   metrics={metricas?.[player.id]}
                   indice={indice}
                   escala={0.62}
+                  photoService={photoService}
                 />
               </button>
             </li>
@@ -298,10 +299,10 @@ function PerfilVacio({ children }) {
   )
 }
 
-function Perfil({ player, metrics, indice, ranking, total }) {
+function Perfil({ player, metrics, indice, ranking, total, photoService }) {
   return (
     <div className={`${tarjeta} dashboard-profile flex flex-wrap items-center gap-6 max-sm:justify-center sm:gap-8`}>
-      <TarjetaJugador player={player} metrics={metrics} indice={indice} ranking={ranking} />
+      <TarjetaJugador player={player} metrics={metrics} indice={indice} ranking={ranking} photoService={photoService} />
       <div className="dashboard-perfil-info flex min-w-60 flex-1">
         <PanelJugador
           player={player}
@@ -449,6 +450,7 @@ function DashboardWorkspace({
   rankingService,
   renderEvolution,
   organizacion,
+  photoService,
 }) {
   const players = usePlayers(playersService)
   const [selectedId, setSelectedId] = useState(
@@ -548,6 +550,7 @@ function DashboardWorkspace({
             players={players.rows}
             metricas={metricasEquipo}
             onSelect={elegirJugador}
+            photoService={photoService}
           />
         )
       ) : (
@@ -566,6 +569,7 @@ function DashboardWorkspace({
                   ).length
                 : 0
             }
+            photoService={photoService}
           />
           {estado === 'loading' ? (
             <EsqueletoResumen />
@@ -667,6 +671,7 @@ export default function Dashboard({
   renderEvolution,
   db,
   session,
+  photoService,
 }) {
   const uid = session?.uid
   const orgId = session?.orgId
@@ -703,6 +708,7 @@ export default function Dashboard({
       rankingService={liveServices?.ranking}
       renderEvolution={renderEvolution}
       organizacion={organizacion}
+      photoService={photoService}
     />
   )
 }
