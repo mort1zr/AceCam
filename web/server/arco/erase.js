@@ -41,9 +41,11 @@ export function createEraser({ db, auth, bucket = null, container = null }) {
       plan.documents.push(user.ref.path)
       plan.authUids.push(user.id)
     }
-    for (const collection of ['invites', 'players', 'applications']) {
+    for (const collection of ['invites', 'applications']) {
       for (const doc of await docsWhere(collection, 'orgId', orgId)) plan.documents.push(doc.ref.path)
     }
+    // Los jugadores tienen su foto de perfil en la subcolección media: se borran con ella.
+    for (const player of await docsWhere('players', 'orgId', orgId)) plan.recursive.push(player.ref.path)
     // Los partidos tienen subcolecciones (coachNotes): se borran con todo lo que cuelga de ellos.
     for (const match of await docsWhere('matches', 'orgId', orgId)) plan.recursive.push(match.ref.path)
     // La organización con usage, applicationForms y recruitmentIntegrations.
@@ -52,12 +54,13 @@ export function createEraser({ db, auth, bucket = null, container = null }) {
     return plan
   }
 
-  /** Un jugador (dato del titular): su ficha, sus partidos con videos y notas, y sus postulaciones. */
+  /** Un jugador (dato del titular): su ficha y su foto, sus partidos con videos y notas, y sus postulaciones. */
   async function planPlayer(playerId) {
     checkId('playerId', playerId)
     const plan = emptyPlan({ type: 'player', id: playerId })
     const player = await db.doc(`players/${playerId}`).get()
-    if (player.exists) plan.documents.push(player.ref.path)
+    // Con su foto de perfil (players/{playerId}/media).
+    if (player.exists) plan.recursive.push(player.ref.path)
 
     for (const match of await docsWhere('matches', 'playerId', playerId)) {
       plan.recursive.push(match.ref.path)

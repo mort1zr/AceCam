@@ -409,11 +409,12 @@ service cloud.firestore {
           && isText(value.email, 3, 254) && value.email.matches('^[^ @]+@[^ @]+[.][^ @]+$');
     }
 
-    // Ruta exacta de la foto de perfil del jugador (ver storage.rules): solo
-    // orgs/{orgId}/players/{playerId}/photo.(jpg|jpeg|png|webp), nunca otra.
+    // Ruta exacta de la foto de perfil del jugador: un documento de su subcolección media
+    // (players/{playerId}/media/photo-…), nunca otra. La foto vive en Firestore porque el
+    // proyecto (plan Spark) no tiene Firebase Storage.
     function validPlayerPhoto(data, playerId) {
       return data.get('photoPath', null) == null
-        || data.photoPath.matches('^orgs/' + data.orgId + '/players/' + playerId + '/photo[.](jpg|jpeg|png|webp)$');
+        || data.photoPath.matches('^players/' + playerId + '/media/photo-[a-z0-9]{8,32}$');
     }
 
     function validPlayer(data, playerId) {
@@ -478,6 +479,31 @@ service cloud.firestore {
         && request.resource.data.updatedAt == request.time;
 
       allow delete: if canManage(resource.data);
+    }
+
+    // ---------- players/{playerId}/media/{photoId}: foto de perfil ----------
+    // JPEG de 256×256 (máx. 60 KB) reducido en el navegador. La ve y la cambia quien gestiona
+    // al jugador (el mismo acceso que su ficha). No se edita: se crea otra y se borra la anterior.
+    match /players/{playerId}/media/{photoId} {
+      function managedPlayer() {
+        return get(/databases/$(database)/documents/players/$(playerId)).data;
+      }
+
+      allow get: if canManage(managedPlayer());
+      allow create: if photoId.matches('^photo-[a-z0-9]{8,32}$')
+        && canManage(managedPlayer())
+        && managedPlayer().get('deletedAt', null) == null
+        && request.resource.data.keys().hasOnly(['orgId', 'contentType', 'width', 'height', 'data', 'createdBy', 'createdAt'])
+        && request.resource.data.keys().hasAll(['orgId', 'contentType', 'width', 'height', 'data', 'createdBy', 'createdAt'])
+        && request.resource.data.orgId == managedPlayer().orgId
+        && request.resource.data.contentType == 'image/jpeg'
+        && request.resource.data.width == 256 && request.resource.data.height == 256
+        && request.resource.data.data is bytes
+        && request.resource.data.data.size() > 0 && request.resource.data.data.size() <= 61440
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.createdAt == request.time;
+      allow delete: if canManage(managedPlayer());
+      allow list, update: if false;
     }
 
     // ---------- matches/{matchId} ----------

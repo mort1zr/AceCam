@@ -1,18 +1,14 @@
 rules_version = '2';
 
-// Reglas de Storage para los videos de partidos (PCIT-24) y las fotos de perfil de jugadores.
-// Rutas:
-// - orgs/{orgId}/matches/{matchId}/video.mp4 | video.mov (la misma que valida la regla de matches).
-// - orgs/{orgId}/players/{playerId}/photo.jpg | photo.jpeg | photo.png | photo.webp
-//   (la misma que valida validPlayerPhoto() en firestore.rules para el campo photoPath).
+// Reglas de Storage para los videos de partidos (PCIT-24).
+// Ruta: orgs/{orgId}/matches/{matchId}/video.mp4 | video.mov (la misma que valida la regla de matches).
+// La foto de perfil del jugador no usa Storage: va en Firestore (players/{playerId}/media).
 // Pruebas: web/tests/storage (npm run test:rules).
 //
 // - Solo usuarios con sesión cuya ficha en users tenga ese orgId.
 // - El video se sube antes de crear el documento del partido (flujo de PCIT-27),
 //   así que no se exige que matches/{matchId} exista todavía.
-// - Tamaño máximo: 500 MB para el video (MAX_VIDEO_BYTES en web/src/panel/lib/videoUpload.js;
-//   cambiar ambos a la vez) y 5 MB para la foto de perfil (MAX_PHOTO_BYTES en
-//   web/src/panel/lib/photoUpload.js; cambiar ambos a la vez).
+// - Tamaño máximo: 500 MB (MAX_VIDEO_BYTES en web/src/panel/lib/videoUpload.js; cambiar ambos a la vez).
 // - El worker (PCIT-35) lee con el Admin SDK, que no pasa por estas reglas.
 // - processed.mp4 (PCIT-161) se lee con sesión de la misma organización;
 //   solo el worker puede escribirlo o borrarlo mediante el Admin SDK.
@@ -44,32 +40,6 @@ service firebase.storage {
       allow create, update: if request.auth != null && canAccess(orgId, matchId, true) && validVideo(fileName);
       allow delete: if request.auth != null && fileName != 'processed.mp4'
         && canAccess(orgId, matchId, resource.metadata.get('uploadedBy', '') == request.auth.uid);
-    }
-
-    // Foto de perfil del jugador. A diferencia del video, el jugador ya existe
-    // en Firestore cuando se sube la foto (se hace desde su perfil), así que no
-    // hace falta el escape "beforeCreate" que usa canAccess() para los videos.
-    function validPlayerPhoto(fileName) {
-      return request.resource.size > 0
-        && request.resource.size <= 5 * 1024 * 1024
-        && ((fileName == 'photo.jpg' && request.resource.contentType == 'image/jpeg')
-          || (fileName == 'photo.jpeg' && request.resource.contentType == 'image/jpeg')
-          || (fileName == 'photo.png' && request.resource.contentType == 'image/png')
-          || (fileName == 'photo.webp' && request.resource.contentType == 'image/webp'))
-        && request.resource.metadata.uploadedBy == request.auth.uid;
-    }
-
-    function canAccessPlayer(orgId, playerId) {
-      let user = firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data;
-      let player = firestore.get(/databases/(default)/documents/players/$(playerId)).data;
-      return user.orgId == orgId && user.role in ['admin', 'coach']
-        && player.orgId == orgId && (user.role == 'admin' || player.createdBy == request.auth.uid);
-    }
-
-    match /orgs/{orgId}/players/{playerId}/{fileName} {
-      allow read: if request.auth != null && canAccessPlayer(orgId, playerId);
-      allow create, update: if request.auth != null && canAccessPlayer(orgId, playerId) && validPlayerPhoto(fileName);
-      allow delete: if request.auth != null && canAccessPlayer(orgId, playerId);
     }
 
     // Todo lo demás queda cerrado.

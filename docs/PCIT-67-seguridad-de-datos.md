@@ -40,6 +40,7 @@ matriz de acceso (PCIT-210).
 | `invites/{correo}` | El **correo** de la persona invitada (es el ID), `invitedBy`, `acceptedBy` | No | Personal | La persona invitada (la suya) y el dueño o los administradores de la organización | Pendiente: se puede anular. ⚠️ Aceptada: **sin plazo** |
 | `platformAdmins/{uid}` | Ninguno: solo marca que un UID es administrador | No | Interno | Solo la propia cuenta | Mientras dure el permiso. Lo gestiona un operador desde la consola |
 | `players/{playerId}` | `fullName`, `birthDate`, `academy`, `nationality`, `coachName`, datos deportivos (`utr`, `nationalRanking`, `graduationYear`…), **`guardian`** (nombre, teléfono y correo del apoderado), `consent` | **Sí** | **Sensible** | Administradores de la organización y el entrenador que creó la ficha | ⚠️ **Sin plazo.** "Eliminar de la plantilla" solo marca `deletedAt` y conserva todo. Las reglas permiten borrar, pero la web no lo hace |
+| `players/{playerId}/media/{foto}` | **Foto de perfil** del jugador (JPEG de 256×256, hasta 60 KB). La ficha guarda su ruta en `photoPath` | **Sí** | **Sensible** (imagen de una persona, puede ser menor) | Administradores de la organización y el entrenador que creó la ficha. Nunca con un enlace público | Hasta que la quitan desde el perfil ("Quitar foto") o se borran los datos del jugador (ARCO) |
 | `matches/{matchId}` | Jugador (`playerId`), **nombre del rival** (`opponent`, un tercero), torneo, fecha, resultado y `statistics` (rendimiento de una persona) | Indirecto: el jugador puede ser menor | Personal | Administradores de la organización y el entrenador que creó el partido | ⚠️ **Sin plazo.** Las reglas permiten borrar, pero la web no lo hace |
 | `matches/{matchId}/coachNotes/{uid}` | Texto libre de un entrenador sobre el partido de un jugador | Indirecto | **Sensible** (opiniones sobre una persona) | Solo su autor | El autor la borra al guardar un texto vacío |
 | `orgs/{orgId}/applicationForms/{formId}` | Ninguno: solo `createdAt` | No | Interno | Cualquiera con el ID del enlace (formulario público); solo el dueño o los administradores pueden listarlos | Hasta que se desactiva el enlace |
@@ -159,6 +160,11 @@ integración de Google y una invitación pendiente; club B con sus dos miembros.
 | `players/{nuevo} en org-a` | crear | ❌ | ❌ | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ | Cualquier miembro registra jugadores en su club, con su UID y la autorización. |
 | `players/p-a` | editar | ❌ | ❌ | ✅ | ❌ | ✅ | ❌ | ❌ | ❌ | Edita quien lo gestiona; nunca el club, el autor ni la autorización. |
 | `players/p-a` | borrar | ❌ | ❌ | ✅ | ❌ | ✅ | ❌ | ❌ | ❌ | Borra quien lo gestiona. |
+| `players/p-a/media/{foto}` | leer | ❌ | ❌ | ✅ | ❌ | ✅ | ❌ | ❌ | ❌ | La foto de perfil la ve quien ve la ficha del jugador. |
+| `players/p-a/media` | listar | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | Las fotos se piden por la ruta guardada en la ficha, nunca listando. |
+| `players/p-a/media/{nueva}` | crear | ❌ | ❌ | ✅ | ❌ | ✅ | ❌ | ❌ | ❌ | Sube la foto quien gestiona al jugador: JPEG de 256 px, hasta 60 KB y con su UID. |
+| `players/p-a/media/{foto}` | editar | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | Una foto no se edita: se sube otra y se borra la anterior. |
+| `players/p-a/media/{foto}` | borrar | ❌ | ❌ | ✅ | ❌ | ✅ | ❌ | ❌ | ❌ | La quita quien gestiona al jugador. |
 | `matches/m-a` | leer | ❌ | ❌ | ✅ | ❌ | ✅ | ❌ | ❌ | ❌ | El entrenador ve sus partidos; el administrador, todos los del club. |
 | `matches (org-a, creados por coach-a)` | listar | ❌ | ❌ | ✅ | ❌ | ✅ | ❌ | ❌ | ❌ | Igual que leer. |
 | `matches/{nuevo} con el jugador p-a` | crear | ❌ | ❌ | ✅ | ❌ | ✅ | ❌ | ❌ | ❌ | Analiza quien gestiona al jugador, sumando un análisis al mes (PCIT-41). |

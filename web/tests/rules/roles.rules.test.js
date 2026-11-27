@@ -2,10 +2,12 @@
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { assertFails, assertSucceeds, initializeTestEnvironment } from '@firebase/rules-unit-testing'
-import { collection, deleteDoc, doc, getDoc, getDocs, query, serverTimestamp, setDoc, updateDoc, where } from 'firebase/firestore'
+import { Bytes, collection, deleteDoc, doc, getDoc, getDocs, query, serverTimestamp, setDoc, updateDoc, where } from 'firebase/firestore'
 import { getBytes, ref, uploadBytes } from 'firebase/storage'
 import { afterAll, beforeAll, beforeEach, expect, it } from 'vitest'
+import { createPhotoUploadService } from '../../src/panel/lib/photoUpload.js'
 import { createFirestorePlayersService } from '../../src/panel/lib/services/firestorePlayersService.js'
+import { createPlayerPhotoService } from '../../src/panel/lib/services/playerPhotoService.js'
 
 const read = name => readFileSync(fileURLToPath(new URL(`../../../firebase/${name}`, import.meta.url)), 'utf8')
 let env
@@ -133,15 +135,61 @@ it('PCIT-42 elimina de plantilla conservando historial y bloquea nuevos análisi
 it('sube y quita la foto de perfil por separado del resto de la ficha, sin tocar otros jugadores', async () => {
   const db = context('a').firestore()
   const service = createFirestorePlayersService({ db, orgId: 'org-a', actorId: 'a', role: 'coach' })
-  await service.updatePhoto({ id: 'a' }, 'orgs/org-a/players/a/photo.jpg')
+  await service.updatePhoto({ id: 'a' }, 'players/a/media/photo-abc12345')
   let saved = (await getDoc(doc(db, 'players', 'a'))).data()
-  expect(saved.photoPath).toBe('orgs/org-a/players/a/photo.jpg')
+  expect(saved.photoPath).toBe('players/a/media/photo-abc12345')
   expect(saved.fullName).toBe('Jugador de prueba')
   await service.updatePhoto({ id: 'a' }, null)
   saved = (await getDoc(doc(db, 'players', 'a'))).data()
   expect(saved).not.toHaveProperty('photoPath')
-  await expect(service.updatePhoto({ id: 'b' }, 'orgs/org-a/players/b/photo.jpg')).rejects.toMatchObject({ code: 'permission-denied' })
-  await expect(updateDoc(doc(db, 'players', 'a'), { photoPath: 'orgs/org-b/players/a/photo.jpg' })).rejects.toBeTruthy()
-  await expect(updateDoc(doc(db, 'players', 'a'), { photoPath: 'orgs/org-a/players/otro/photo.jpg' })).rejects.toBeTruthy()
-  await expect(updateDoc(doc(db, 'players', 'a'), { photoPath: 'orgs/org-a/players/a/photo.gif' })).rejects.toBeTruthy()
+  await expect(service.updatePhoto({ id: 'b' }, 'players/b/media/photo-abc12345')).rejects.toMatchObject({ code: 'permission-denied' })
+  for (const photoPath of ['players/b/media/photo-abc12345', 'orgs/org-a/players/a/photo.jpg', 'players/a/media/photo-ABC12345', 'players/a/media/otra-abc12345']) {
+    await expect(updateDoc(doc(db, 'players', 'a'), { photoPath }), photoPath).rejects.toBeTruthy()
+  }
+})
+
+it('la foto de perfil vive en Firestore: la ve y la cambia quien gestiona al jugador, con JPEG de 256 px y hasta 60 KB', async () => {
+  const jpeg = new Uint8Array([0xff, 0xd8, 0xff, 0xd9])
+  const resizeImage = async () => jpeg
+  const file = new File([jpeg], 'foto.jpg', { type: 'image/jpeg' })
+  const a = context('a').firestore()
+  const path = await createPhotoUploadService({ db: a, resizeImage }).uploadPlayerPhoto({ file, orgId: 'org-a', actorId: 'a', playerId: 'a' })
+  expect(path).toMatch(/^players\/a\/media\/photo-[a-z0-9]{8,32}$/)
+  const blob = await createPlayerPhotoService({ db: a, orgId: 'org-a' }).load({ playerId: 'a', path })
+  expect(blob.type).toBe('image/jpeg')
+  expect(new Uint8Array(await blob.arrayBuffer())).toEqual(jpeg)
+  await assertSucceeds(getDoc(doc(context('admin').firestore(), path)))
+  for (const uid of ['b', 'outside', 'unknown']) await assertFails(getDoc(doc(context(uid).firestore(), path)))
+  await assertFails(getDocs(collection(a, 'players/a/media')))
+  await assertFails(updateDoc(doc(a, path), { width: 512 }))
+
+  // Solo quien gestiona al jugador, con el documento exacto.
+  const valid = uid => ({ orgId: 'org-a', contentType: 'image/jpeg', width: 256, height: 256, data: Bytes.fromUint8Array(jpeg), createdBy: uid, createdAt: serverTimestamp() })
+  await assertFails(createPhotoUploadService({ db: context('b').firestore(), resizeImage }).uploadPlayerPhoto({ file, orgId: 'org-a', actorId: 'b', playerId: 'a' }))
+  await assertFails(setDoc(doc(context('outside').firestore(), 'players/a/media/photo-abc12345'), valid('outside')))
+  await assertSucceeds(setDoc(doc(context('admin').firestore(), 'players/a/media/photo-admin1234'), valid('admin')))
+  for (const [id, data] of [
+    ['photo-abc12345', { ...valid('a'), createdBy: 'b' }],
+    ['photo-abc12345', { ...valid('a'), orgId: 'org-b' }],
+    ['photo-abc12345', { ...valid('a'), contentType: 'image/png' }],
+    ['photo-abc12345', { ...valid('a'), width: 512 }],
+    ['photo-abc12345', { ...valid('a'), data: 'no son bytes' }],
+    ['photo-abc12345', { ...valid('a'), data: Bytes.fromUint8Array(new Uint8Array(0)) }],
+    ['photo-abc12345', { ...valid('a'), data: Bytes.fromUint8Array(new Uint8Array(61441)) }],
+    ['photo-abc12345', { ...valid('a'), extra: true }],
+    ['otra-abc12345', valid('a')],
+  ]) await assertFails(setDoc(doc(a, `players/a/media/${id}`), data))
+  await assertSucceeds(setDoc(doc(a, 'players/a/media/photo-limite12'), { ...valid('a'), data: Bytes.fromUint8Array(new Uint8Array(61440)) }))
+
+  // Borrar: quien gestiona al jugador; nunca otro entrenador ni otra organización.
+  await assertFails(deleteDoc(doc(context('b').firestore(), path)))
+  await assertFails(deleteDoc(doc(context('outside').firestore(), path)))
+  await assertSucceeds(createPhotoUploadService({ db: a, resizeImage }).removePlayerPhoto(path))
+  let stillThere = true
+  await env.withSecurityRulesDisabled(async ctx => { stillThere = (await getDoc(doc(ctx.firestore(), path))).exists() })
+  expect(stillThere).toBe(false)
+
+  // Un jugador retirado de la plantilla no recibe fotos nuevas.
+  await createFirestorePlayersService({ db: a, orgId: 'org-a', actorId: 'a', role: 'coach' }).remove({ id: 'a' })
+  await assertFails(setDoc(doc(a, 'players/a/media/photo-retirado1'), valid('a')))
 })

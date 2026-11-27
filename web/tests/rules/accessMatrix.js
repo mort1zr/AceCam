@@ -97,6 +97,16 @@ export const MATRIX = [
     permitido: CREADOR_Y_ADMIN, motivo: 'Edita quien lo gestiona; nunca el club, el autor ni la autorización.' },
   { id: 'players.delete', recurso: 'players/p-a', operacion: 'borrar',
     permitido: CREADOR_Y_ADMIN, motivo: 'Borra quien lo gestiona.' },
+  { id: 'players.foto.get', recurso: 'players/p-a/media/{foto}', operacion: 'leer',
+    permitido: CREADOR_Y_ADMIN, motivo: 'La foto de perfil la ve quien ve la ficha del jugador.' },
+  { id: 'players.foto.list', recurso: 'players/p-a/media', operacion: 'listar',
+    permitido: [], motivo: 'Las fotos se piden por la ruta guardada en la ficha, nunca listando.' },
+  { id: 'players.foto.create', recurso: 'players/p-a/media/{nueva}', operacion: 'crear',
+    permitido: CREADOR_Y_ADMIN, motivo: 'Sube la foto quien gestiona al jugador: JPEG de 256 px, hasta 60 KB y con su UID.' },
+  { id: 'players.foto.update', recurso: 'players/p-a/media/{foto}', operacion: 'editar',
+    permitido: [], motivo: 'Una foto no se edita: se sube otra y se borra la anterior.' },
+  { id: 'players.foto.delete', recurso: 'players/p-a/media/{foto}', operacion: 'borrar',
+    permitido: CREADOR_Y_ADMIN, motivo: 'La quita quien gestiona al jugador.' },
 
   // ---------- matches ----------
   { id: 'matches.get', recurso: 'matches/m-a', operacion: 'leer',
