@@ -59,31 +59,31 @@ it('pide confirmación antes de retirar al jugador, permite cancelar y reintenta
 
 it('sube la foto de perfil, la guarda en la ficha y refleja el cambio cuando llega de la suscripción', async () => {
   const api = service()
-  api.updatePhoto = vi.fn().mockResolvedValue({ ...player, photoPath: 'orgs/org-a/players/p1/photo.jpg' })
-  const photoUploadService = { uploadPlayerPhoto: vi.fn().mockResolvedValue('orgs/org-a/players/p1/photo.jpg'), removePlayerPhoto: vi.fn() }
+  api.updatePhoto = vi.fn().mockResolvedValue({ ...player, photoPath: 'players/p1/media/photo-abc12345' })
+  const photoUploadService = { uploadPlayerPhoto: vi.fn().mockResolvedValue('players/p1/media/photo-abc12345'), removePlayerPhoto: vi.fn() }
   const photoService = { load: vi.fn().mockResolvedValue(new Blob(['foto'])) }
   const user = userEvent.setup()
   const props = { service: api, actorId: 'coach', photoService, photoUploadService, onBack: () => {} }
   const { rerender } = render(<PlayerProfile player={player} {...props} />)
   await user.upload(screen.getByLabelText('Subir foto'), photo())
   expect(photoUploadService.uploadPlayerPhoto).toHaveBeenCalledWith(expect.objectContaining({ file: expect.any(File), orgId: 'org-a', actorId: 'coach', playerId: 'p1' }))
-  expect(api.updatePhoto).toHaveBeenCalledWith(player, 'orgs/org-a/players/p1/photo.jpg')
+  expect(api.updatePhoto).toHaveBeenCalledWith(player, 'players/p1/media/photo-abc12345')
   expect(photoUploadService.removePlayerPhoto).not.toHaveBeenCalled()
   // La suscripción en vivo trae el photoPath nuevo; el perfil se vuelve a renderizar con el jugador actualizado.
-  rerender(<PlayerProfile player={{ ...player, photoPath: 'orgs/org-a/players/p1/photo.jpg' }} {...props} />)
+  rerender(<PlayerProfile player={{ ...player, photoPath: 'players/p1/media/photo-abc12345' }} {...props} />)
   expect(await screen.findByRole('button', { name: 'Quitar foto' })).toBeTruthy()
 })
 
 it('muestra un error si la subida de la foto falla', async () => {
   const api = service()
   api.updatePhoto = vi.fn()
-  const photoUploadService = { uploadPlayerPhoto: vi.fn().mockRejectedValue({ code: 'storage/unauthorized' }), removePlayerPhoto: vi.fn() }
+  const photoUploadService = { uploadPlayerPhoto: vi.fn().mockRejectedValue({ code: 'permission-denied' }), removePlayerPhoto: vi.fn() }
   const photoService = { load: vi.fn() }
   const user = userEvent.setup()
   render(<PlayerProfile player={player} service={api} actorId="coach" photoService={photoService} photoUploadService={photoUploadService} onBack={() => {}} />)
   await user.upload(screen.getByLabelText('Subir foto'), photo())
   const alert = await screen.findByRole('alert')
-  expect(alert.textContent).toContain('No tienes permiso para subir la foto de este jugador.')
+  expect(alert.textContent).toContain('No tienes permiso para cambiar la foto de este jugador.')
   expect(api.updatePhoto).not.toHaveBeenCalled()
 })
 
@@ -103,7 +103,7 @@ it('rechaza un formato no permitido sin llamar al servicio', async () => {
 })
 
 it('quita una foto existente, borra el archivo anterior y refleja el cambio cuando llega de la suscripción', async () => {
-  const withPhoto = { ...player, photoPath: 'orgs/org-a/players/p1/photo.jpg' }
+  const withPhoto = { ...player, photoPath: 'players/p1/media/photo-abc12345' }
   const api = service()
   api.updatePhoto = vi.fn().mockResolvedValue({ ...withPhoto, photoPath: undefined })
   const photoUploadService = { uploadPlayerPhoto: vi.fn(), removePlayerPhoto: vi.fn().mockResolvedValue() }
@@ -114,7 +114,7 @@ it('quita una foto existente, borra el archivo anterior y refleja el cambio cuan
   await screen.findByRole('button', { name: 'Quitar foto' })
   await user.click(screen.getByRole('button', { name: 'Quitar foto' }))
   expect(api.updatePhoto).toHaveBeenCalledWith(withPhoto, null)
-  expect(photoUploadService.removePlayerPhoto).toHaveBeenCalledWith('orgs/org-a/players/p1/photo.jpg')
+  expect(photoUploadService.removePlayerPhoto).toHaveBeenCalledWith('players/p1/media/photo-abc12345')
   rerender(<PlayerProfile player={{ ...withPhoto, photoPath: undefined }} {...props} />)
   expect(await screen.findByLabelText('Subir foto')).toBeTruthy()
 })

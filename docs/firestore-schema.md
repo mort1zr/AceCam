@@ -138,7 +138,7 @@ El resto los completa la gestión completa (PCIT-42).
 | `graduationYear` | number \| null | no | Año en que termina el colegio |
 | `coachName` | string \| null | no | Entrenador del jugador en su academia |
 | `guardian` | object \| null | sí si es menor de 18 | `{ name, phone, email }` del padre, madre o apoderado |
-| `photoPath` | string \| null | no | Ruta en Storage de la foto de perfil: exactamente `orgs/{orgId}/players/{playerId}/photo.(jpg\|jpeg\|png\|webp)`. Se sube y se quita por separado del resto de la ficha (`service.updatePhoto`), nunca desde el formulario de edición |
+| `photoPath` | string \| null | no | Ruta de la foto de perfil en Firestore: exactamente `players/{playerId}/media/photo-{id}` (ver `players/{playerId}/media`). Se sube y se quita por separado del resto de la ficha (`service.updatePhoto`), nunca desde el formulario de edición |
 | `consent` | object | sí | Ver abajo |
 | `createdBy` | string | sí | `uid` del entrenador |
 | `createdAt` | Timestamp | sí | |
@@ -299,6 +299,19 @@ Desde `web/`, ejecuta `npm run test:rules` para verificar la persistencia,
 el conflicto de escritura y los rechazos de acceso en Firebase Emulator Suite.
 En el emulador, abre **Partidos → Ver reporte → Tu nota** con una cuenta de
 prueba y un partido Listo accesible.
+
+## `players/{playerId}/media/{photoId}`
+
+Foto de perfil del jugador. El proyecto está en el plan Spark y no tiene Firebase Storage, así que la foto se reduce en el navegador a un JPEG de 256×256 y se guarda aquí. Cada subida crea un documento nuevo (`photo-` y de 8 a 32 letras o números en minúscula) y la anterior se borra. Solo la leen, crean y borran quienes gestionan al jugador; no se lista ni se edita.
+
+| Campo | Tipo | Obligatorio | Notas |
+| --- | --- | --- | --- |
+| `orgId` | string | sí | Igual al `orgId` del jugador |
+| `contentType` | string | sí | Siempre `'image/jpeg'` |
+| `width`, `height` | number | sí | Siempre 256 |
+| `data` | bytes | sí | La imagen, de 1 byte a 60 KB (61 440 bytes) |
+| `createdBy` | string | sí | UID de quien la subió |
+| `createdAt` | timestamp | sí | Hora del servidor |
 
 ## `platformAdmins/{uid}`
 

@@ -8,7 +8,7 @@ import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { assertFails, assertSucceeds, initializeTestEnvironment } from '@firebase/rules-unit-testing'
 import {
-  collection, deleteDoc, doc, getDoc, getDocs, query, serverTimestamp, setDoc, updateDoc, where, writeBatch,
+  Bytes, collection, deleteDoc, doc, getDoc, getDocs, query, serverTimestamp, setDoc, updateDoc, where, writeBatch,
 } from 'firebase/firestore'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { MATRIX, ROLES, expected } from './accessMatrix.js'
@@ -27,6 +27,8 @@ const UIDS = {
 const ORG = 'org-a'
 const FORM = 'EnlaceClubA000000001'
 const INVITE = 'nuevo@club-a.test'
+const PHOTO = 'photo-semilla1'
+const JPEG = new Uint8Array([0xff, 0xd8, 0xff, 0xd9])
 const now = new Date()
 const PERIOD = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}`
 const email = uid => `${uid}@acecam.test`
@@ -69,6 +71,9 @@ async function seed() {
     set('players/p-a', {
       orgId: ORG, fullName: 'Jugador A', birthDate: '2000-01-15', createdBy: 'coach-a', createdAt: now,
       consent: { accepted: true, version: 'players-v1', method: 'coach-attestation', recordedBy: 'coach-a', recordedAt: now },
+    })
+    set(`players/p-a/media/${PHOTO}`, {
+      orgId: ORG, contentType: 'image/jpeg', width: 256, height: 256, data: Bytes.fromUint8Array(JPEG), createdBy: 'coach-a', createdAt: now,
     })
     set('matches/m-a', {
       orgId: ORG, playerId: 'p-a', playerPosition: 'abajo', opponent: 'Rival', matchDate: '2026-11-01',
@@ -145,6 +150,13 @@ const OPERATIONS = {
   }),
   'players.update': db => updateDoc(doc(db, 'players/p-a'), { fullName: 'Jugador Editado', updatedAt: serverTimestamp() }),
   'players.delete': db => deleteDoc(doc(db, 'players/p-a')),
+  'players.foto.get': db => getDoc(doc(db, `players/p-a/media/${PHOTO}`)),
+  'players.foto.list': db => getDocs(collection(db, 'players/p-a/media')),
+  'players.foto.create': (db, role) => setDoc(doc(db, 'players/p-a/media/photo-nueva123'), {
+    orgId: ORG, contentType: 'image/jpeg', width: 256, height: 256, data: Bytes.fromUint8Array(JPEG), createdBy: idOf(role), createdAt: serverTimestamp(),
+  }),
+  'players.foto.update': db => updateDoc(doc(db, `players/p-a/media/${PHOTO}`), { width: 128 }),
+  'players.foto.delete': db => deleteDoc(doc(db, `players/p-a/media/${PHOTO}`)),
 
   'matches.get': db => getDoc(doc(db, 'matches/m-a')),
   'matches.list': db => getDocs(ownedByCoachA(db, 'matches')),

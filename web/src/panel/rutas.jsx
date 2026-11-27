@@ -16,7 +16,8 @@ const videoApi = videoApiUrl
   : null
 const { uploadVideo } = videoApi ? createAzureVideoUploadService({ client: videoApi }) : createVideoUploadService({ storage })
 // Las fotos de perfil de los jugadores siempre van a Firebase Storage (no a Azure).
-const photoUploadService = createPhotoUploadService({ storage })
+// La foto de perfil va en Firestore: el proyecto (plan Spark) no tiene Firebase Storage.
+const photoUploadService = createPhotoUploadService({ db })
 
 function usePropsPanel() {
   const { user, profile } = useAuth()
@@ -41,7 +42,7 @@ function usePropsPanel() {
     ({ plan, periodo }) => contratarPlan({ db, orgId, plan, periodo }),
     [orgId],
   )
-  const photoService = useMemo(() => (orgId ? createPlayerPhotoService({ storage, orgId }) : null), [orgId])
+  const photoService = useMemo(() => (orgId ? createPlayerPhotoService({ db, orgId }) : null), [orgId])
   return {
     db,
     storage,

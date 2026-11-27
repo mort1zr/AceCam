@@ -8,19 +8,16 @@ import { doc, setDoc, updateDoc } from 'firebase/firestore'
 import { getBytes, ref, uploadBytes } from 'firebase/storage'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { createVideoUploadService } from '../../src/panel/lib/videoUpload.js'
-import { createPhotoUploadService } from '../../src/panel/lib/photoUpload.js'
 
 const ORG = 'org-demo'
 const OTHER_ORG = 'org-club'
 const COACH = 'coach-demo'
 const OTHER_COACH = 'coach-club'
 const path = (orgId, name = 'video.mp4', matchId = 'm-nuevo') => `orgs/${orgId}/matches/${matchId}/${name}`
-const photoPath = (orgId, playerId = 'p-demo', name = 'photo.jpg') => `orgs/${orgId}/players/${playerId}/${name}`
 
 const read = file => readFileSync(fileURLToPath(new URL(file, import.meta.url)), 'utf8')
 const bytes = (size = 2048) => new Uint8Array(size).fill(7)
 const mp4 = (uploadedBy = COACH) => ({ contentType: 'video/mp4', customMetadata: { uploadedBy } })
-const jpg = (uploadedBy = COACH) => ({ contentType: 'image/jpeg', customMetadata: { uploadedBy } })
 
 let env
 
@@ -44,8 +41,6 @@ beforeEach(async () => {
     await setDoc(doc(db, 'users', COACH), { email: 'coach@acecam.test', displayName: 'Coach Ramírez', orgId: ORG, role: 'coach', createdAt: new Date() })
     await setDoc(doc(db, 'users', OTHER_COACH), { email: 'coach2@acecam.test', displayName: 'Coach Paredes', orgId: OTHER_ORG, role: 'coach', createdAt: new Date() })
     await uploadBytes(ref(context.storage(), path(OTHER_ORG, 'video.mp4', 'm-club')), bytes(), mp4(OTHER_COACH))
-    await setDoc(doc(db, 'players', 'p-demo'), { orgId: ORG, createdBy: COACH, fullName: 'Jugador de prueba' })
-    await setDoc(doc(db, 'players', 'p-club'), { orgId: OTHER_ORG, createdBy: OTHER_COACH, fullName: 'Jugador del club' })
   })
 })
 
@@ -134,69 +129,5 @@ describe('uploadVideo() contra el emulador', () => {
     const { uploadVideo } = createVideoUploadService({ storage: coachStorage() })
     const file = new File([bytes()], 'partido.mov', { type: 'video/quicktime' })
     await expect(uploadVideo({ file, orgId: OTHER_ORG, actorId: COACH, matchId: 'm-x' })).rejects.toMatchObject({ code: 'storage/unauthorized' })
-  })
-})
-
-describe('reglas de Storage · foto de perfil del jugador', () => {
-  it('el entrenador sube, lee y reemplaza la foto de su propio jugador', async () => {
-    await assertSucceeds(uploadBytes(ref(coachStorage(), photoPath(ORG)), bytes(), jpg()))
-    await assertSucceeds(getBytes(ref(coachStorage(), photoPath(ORG))))
-    await assertSucceeds(uploadBytes(ref(coachStorage(), photoPath(ORG, 'p-demo', 'photo.png')), bytes(), { contentType: 'image/png', customMetadata: { uploadedBy: COACH } }))
-  })
-
-  it('niega sin sesión, a otra organización o al jugador de otro entrenador', async () => {
-    await assertFails(uploadBytes(ref(env.unauthenticatedContext().storage(), photoPath(ORG)), bytes(), jpg()))
-    await assertFails(uploadBytes(ref(coachStorage(), photoPath(OTHER_ORG, 'p-club')), bytes(), jpg()))
-    await assertFails(getBytes(ref(coachStorage(), photoPath(OTHER_ORG, 'p-club'))))
-    const otherCoachStorage = env.authenticatedContext(OTHER_COACH).storage()
-    await uploadBytes(ref(otherCoachStorage, photoPath(OTHER_ORG, 'p-club')), bytes(), jpg(OTHER_COACH))
-    await assertFails(getBytes(ref(coachStorage(), photoPath(OTHER_ORG, 'p-club'))))
-  })
-
-  it('el admin de la organización accede a la foto de cualquier jugador propio, nunca de otra organización', async () => {
-    await uploadBytes(ref(coachStorage(), photoPath(ORG)), bytes(), jpg())
-    const admin = env.authenticatedContext('admin-demo')
-    await env.withSecurityRulesDisabled(context => setDoc(doc(context.firestore(), 'users', 'admin-demo'), { orgId: ORG, role: 'admin' }))
-    await assertSucceeds(getBytes(ref(admin.storage(), photoPath(ORG))))
-    await assertFails(getBytes(ref(admin.storage(), photoPath(OTHER_ORG, 'p-club'))))
-  })
-
-  it('niega otros formatos, tipos que no coinciden, archivos vacíos, autoría ajena y rutas fuera de orgs/{orgId}/players', async () => {
-    await assertFails(uploadBytes(ref(coachStorage(), photoPath(ORG, 'p-demo', 'photo.gif')), bytes(), { contentType: 'image/gif', customMetadata: { uploadedBy: COACH } }))
-    await assertFails(uploadBytes(ref(coachStorage(), photoPath(ORG, 'p-demo', 'photo.png')), bytes(), jpg()))
-    await assertFails(uploadBytes(ref(coachStorage(), photoPath(ORG, 'p-demo', 'otra.jpg')), bytes(), jpg()))
-    await assertFails(uploadBytes(ref(coachStorage(), photoPath(ORG)), new Uint8Array(0), jpg()))
-    await assertFails(uploadBytes(ref(coachStorage(), photoPath(ORG)), bytes(), { contentType: 'image/jpeg' }))
-    await assertFails(uploadBytes(ref(coachStorage(), photoPath(ORG)), bytes(), jpg(OTHER_COACH)))
-    await assertFails(uploadBytes(ref(coachStorage(), `orgs/${ORG}/photo.jpg`), bytes(), jpg()))
-  })
-
-  it('el entrenador borra la foto de su jugador, nunca la de otra organización', async () => {
-    const { deleteObject } = await import('firebase/storage')
-    await uploadBytes(ref(coachStorage(), photoPath(ORG)), bytes(), jpg())
-    await assertFails(deleteObject(ref(coachStorage(), photoPath(OTHER_ORG, 'p-club'))))
-    await assertSucceeds(deleteObject(ref(coachStorage(), photoPath(ORG))))
-  })
-})
-
-describe('createPhotoUploadService() contra el emulador', () => {
-  it('sube la foto, informa el avance, devuelve la ruta y permite borrarla', async () => {
-    const { uploadPlayerPhoto, removePlayerPhoto } = createPhotoUploadService({ storage: coachStorage() })
-    const progress = []
-    const file = new File([bytes(2048)], 'Foto de perfil.JPG', { type: 'image/jpeg' })
-    const path = await uploadPlayerPhoto({ file, orgId: ORG, actorId: COACH, playerId: 'p-demo', onProgress: percent => progress.push(percent) })
-    expect(path).toBe('orgs/org-demo/players/p-demo/photo.jpg')
-    expect(progress.at(0)).toBe(0)
-    expect(progress.at(-1)).toBe(100)
-    expect((await getBytes(ref(coachStorage(), path))).byteLength).toBe(2048)
-    await removePlayerPhoto(path)
-    // Se borró de verdad (no solo se rechaza el acceso): falla por no encontrarse, no por permisos.
-    await expect(getBytes(ref(coachStorage(), path))).rejects.toMatchObject({ code: 'storage/object-not-found' })
-  })
-
-  it('las reglas rechazan subir la foto de un jugador de otra organización', async () => {
-    const { uploadPlayerPhoto } = createPhotoUploadService({ storage: coachStorage() })
-    const file = new File([bytes()], 'foto.png', { type: 'image/png' })
-    await expect(uploadPlayerPhoto({ file, orgId: OTHER_ORG, actorId: COACH, playerId: 'p-club' })).rejects.toMatchObject({ code: 'storage/unauthorized' })
   })
 })

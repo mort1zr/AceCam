@@ -76,6 +76,7 @@ async function seed() {
   await set('invites/coach-a@club.test', { email: 'coach-a@club.test', orgId: 'org-a', status: 'aceptada' })
   await set('invites/nueva@club.test', { email: 'nueva@club.test', orgId: 'org-a', status: 'pendiente' })
   await set('players/p-a1', { orgId: 'org-a', fullName: 'Jugadora Uno' })
+  await set('players/p-a1/media/photo-uno12345', { orgId: 'org-a', contentType: 'image/jpeg' })
   await set('players/p-a2', { orgId: 'org-a', fullName: 'Jugador Dos' })
   await set('players/p-b1', { orgId: 'org-b', fullName: 'Jugadora B' })
   await set('matches/m-a1', { orgId: 'org-a', playerId: 'p-a1', createdBy: 'coach-a', videoPath: VIDEOS[0] })
@@ -115,7 +116,7 @@ describe('borrado ARCO (PCIT-221)', () => {
     await eraser.execute(await eraser.planOrg('org-a'), { dryRun: false })
     for (const path of ['orgs/org-a', 'orgs/org-a/usage/2026-11', 'orgs/org-a/applicationForms/Enlace0000000000001',
       'users/owner-a', 'users/coach-a', 'invites/coach-a@club.test', 'invites/nueva@club.test',
-      'players/p-a1', 'players/p-a2', 'matches/m-a1', 'matches/m-a1/coachNotes/coach-a', 'matches/m-a2', 'applications/app-a']) {
+      'players/p-a1', 'players/p-a1/media/photo-uno12345', 'players/p-a2', 'matches/m-a1', 'matches/m-a1/coachNotes/coach-a', 'matches/m-a2', 'applications/app-a']) {
       expect(await exists(path), path).toBe(false)
     }
     for (const name of VIDEOS.slice(0, 4)) {
@@ -132,9 +133,9 @@ describe('borrado ARCO (PCIT-221)', () => {
     expect(await hasAccount('owner-b')).toBe(true)
   })
 
-  it('un jugador: su ficha, sus partidos con videos y notas, y sus postulaciones; nada de otro jugador', async () => {
+  it('un jugador: su ficha y su foto, sus partidos con videos y notas, y sus postulaciones; nada de otro jugador', async () => {
     await eraser.execute(await eraser.planPlayer('p-a1'), { dryRun: false })
-    for (const path of ['players/p-a1', 'matches/m-a1', 'matches/m-a1/coachNotes/coach-a', 'applications/app-a']) {
+    for (const path of ['players/p-a1', 'players/p-a1/media/photo-uno12345', 'matches/m-a1', 'matches/m-a1/coachNotes/coach-a', 'applications/app-a']) {
       expect(await exists(path), path).toBe(false)
     }
     for (const name of [VIDEOS[0], VIDEOS[1], VIDEOS[3]]) {
