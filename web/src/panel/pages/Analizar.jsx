@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router'
+import { useContext, useEffect, useMemo, useState } from 'react'
+import { Link, UNSAFE_LocationContext } from 'react-router'
+import { parseYouTubeUrl } from '../lib/videoSources.js'
 import { DataTable, StatusBadge } from '../components/ui'
 import { usePlanVista } from '../context/PlanVistaContext.js'
 import { MATCH_STATUS } from '../lib/schema.js'
@@ -212,12 +213,15 @@ function QuedanPocos({ usados, limite }) {
 }
 
 function AnalysisWorkspace({ service, playersService }) {
+  const state = useContext(UNSAFE_LocationContext)?.location?.state
+  const recruitmentVideo = state?.recruitmentVideo
+  const initialUrl = parseYouTubeUrl(recruitmentVideo?.url)?.url ?? ''
   const players = usePlayers(playersService)
   const queue = useAnalysisQueue(service)
   const { uso } = usePlanVista()
   const sinAnalisis = service.mode === 'live' && quotaReached(uso.usados, uso.limite)
   const quedanPocos = service.mode === 'live' && quotaLow(uso.usados, uso.limite)
-  const [playerId, setPlayerId] = useState('')
+  const [playerId, setPlayerId] = useState(() => typeof recruitmentVideo?.playerId === 'string' ? recruitmentVideo.playerId : '')
   const [showNewPlayer, setShowNewPlayer] = useState(false)
   const playerName = (id) =>
     players.rows.find((player) => player.id === id)?.fullName ?? 'Jugador no disponible'
@@ -272,6 +276,7 @@ function AnalysisWorkspace({ service, playersService }) {
       <div className="analysis-layout">
         <AnalysisForm
           service={service}
+          initialUrl={initialUrl}
           players={players.rows}
           playersLoading={players.loading}
           playersError={players.error}

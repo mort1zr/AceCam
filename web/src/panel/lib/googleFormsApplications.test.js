@@ -29,7 +29,7 @@ it('avisa cuando la pestaña no contiene las columnas de respuestas', () => {
   expect(readGoogleFormResponses([])).toEqual({ rows: [], invalidRows: [] })
 })
 
-it.each(['Enlace de YouTube', 'Enlace de YouTube (opcional)', 'Enlaces de video'])('recoge %s sin descargar ni analizar el video', title => {
+it.each(['Enlace  de YouTube', 'Enlace de YouTube', 'Enlace de YouTube (opcional)', 'Enlaces de video'])('recoge %s sin descargar ni analizar el video', title => {
   const values = [[...header, title], [...adult, '', '', '', 'https://youtu.be/l7ShweLhjEs']]
   const result = readGoogleFormResponses(values, '2026-11-26')
   expect(result.invalidRows).toEqual([])

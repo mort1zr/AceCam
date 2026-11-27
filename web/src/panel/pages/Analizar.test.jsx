@@ -314,3 +314,10 @@ describe('Límite de análisis del plan (PCIT-41)', () => {
     expect(screen.queryByText('Llegaste al límite de tu plan')).toBeNull()
   })
 })
+
+it('precarga el enlace de la postulación sin iniciar análisis', async () => {
+  const props = setup()
+  render(<MemoryRouter initialEntries={[{ pathname: '/analizar', state: { recruitmentVideo: { url: 'https://youtu.be/l7ShweLhjEs' } } }]}><Analizar {...props} /></MemoryRouter>)
+  expect((await screen.findByLabelText('Enlace del video *')).value).toBe('https://www.youtube.com/watch?v=l7ShweLhjEs')
+  expect(props.send).not.toHaveBeenCalled()
+})
