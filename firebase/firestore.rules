@@ -409,7 +409,14 @@ service cloud.firestore {
           && isText(value.email, 3, 254) && value.email.matches('^[^ @]+@[^ @]+[.][^ @]+$');
     }
 
-    function validPlayer(data) {
+    // Ruta exacta de la foto de perfil del jugador (ver storage.rules): solo
+    // orgs/{orgId}/players/{playerId}/photo.(jpg|jpeg|png|webp), nunca otra.
+    function validPlayerPhoto(data, playerId) {
+      return data.get('photoPath', null) == null
+        || data.photoPath.matches('^orgs/' + data.orgId + '/players/' + playerId + '/photo[.](jpg|jpeg|png|webp)$');
+    }
+
+    function validPlayer(data, playerId) {
       return isText(data.fullName, 2, 120)
         && isIsoDate(data.birthDate)
         && validBirthDate(data.birthDate)
@@ -426,7 +433,8 @@ service cloud.firestore {
         && (data.get('graduationYear', null) == null || (data.graduationYear is int && data.graduationYear >= 1900 && data.graduationYear <= 2100))
         && optionalText(data, 'nationality', 60)
         && optionalText(data, 'coachName', 120)
-        && validGuardian(data);
+        && validGuardian(data)
+        && validPlayerPhoto(data, playerId);
     }
 
     function validPlayerApplicationSource(data, playerId) {
@@ -450,7 +458,7 @@ service cloud.firestore {
         && request.resource.data.createdBy == request.auth.uid
         && request.resource.data.createdAt == request.time
         && validConsent(request.resource.data.consent, request.auth.uid)
-        && validPlayer(request.resource.data)
+        && validPlayer(request.resource.data, playerId)
         && (!('sourceApplicationId' in request.resource.data) ||
           validPlayerApplicationSource(request.resource.data, playerId));
 
@@ -459,8 +467,8 @@ service cloud.firestore {
         && unchanged(['orgId', 'createdBy', 'createdAt', 'consent'])
         && onlyChanges([
              'fullName', 'birthDate', 'academy', 'category', 'dominantHand', 'backhand', 'utr',
-             'nationalRanking', 'nationality', 'graduationYear', 'coachName', 'guardian', 'updatedAt'])
-        && validPlayer(request.resource.data);
+             'nationalRanking', 'nationality', 'graduationYear', 'coachName', 'guardian', 'photoPath', 'updatedAt'])
+        && validPlayer(request.resource.data, playerId);
 
       // PCIT-42: retirar de la plantilla conserva los partidos y su identidad.
       allow update: if canManage(resource.data)

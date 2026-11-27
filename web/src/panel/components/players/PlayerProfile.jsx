@@ -5,11 +5,11 @@ import { playerAge, playersErrorMessage } from '../../lib/players.js'
 import PaginacionTabla, { tamanosPagina } from '../ui/PaginacionTabla.jsx'
 import { EsqueletoTabla } from '../dashboard/EsqueletoDashboard.jsx'
 import '../dashboard/esqueleto.css'
-import TarjetaJugador from '../dashboard/TarjetaJugador.jsx'
 import { useMetricasEquipo } from '../../hooks/useMetricasEquipo.js'
 import { posicionRanking, valoracionJugador } from '../../lib/valoracion.js'
 import Marcador from './Marcador.jsx'
 import PlayerForm from './PlayerForm.jsx'
+import PlayerPhotoCard from './PlayerPhotoCard.jsx'
 
 const sportFields = [
   ['Academia', 'academy'],
@@ -31,7 +31,7 @@ const matchColumns = [
   { key: 'result', label: 'Resultado', render: value => <Marcador value={value} /> },
 ]
 
-export default function PlayerProfile({ service, player, onBack, roster = [], rankingService }) {
+export default function PlayerProfile({ service, player, onBack, roster = [], rankingService, actorId, photoService, photoUploadService }) {
   const metricas = useMetricasEquipo(rankingService, true)
   const indice = Math.max(0, roster.findIndex(fila => fila.id === player.id))
   const ranking = metricas ? posicionRanking(roster, metricas, player.id) : null
@@ -122,7 +122,11 @@ export default function PlayerProfile({ service, player, onBack, roster = [], ra
         </section>
       </div>}
       <div className="players-profile-layout">
-      <div className="players-profile-carta"><TarjetaJugador player={player} metrics={metricas?.[player.id]} indice={indice} ranking={ranking} /></div>
+      <PlayerPhotoCard
+        player={player} metrics={metricas?.[player.id]} indice={indice} ranking={ranking}
+        allowed={allowed} service={service} actorId={actorId}
+        photoService={photoService} photoUploadService={photoUploadService}
+      />
       <div className="players-profile-datos">
       <div className="players-profile-grid">
         <section className="players-form-panel">

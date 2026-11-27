@@ -17,12 +17,28 @@ export function readYouTubeMetadata(output, expectedId, maxBytes) {
   validateLimit(maxBytes)
   let info
   try { info = JSON.parse(output) } catch { throw new VideoImportError('youtube-service', 'No pudimos consultar el video de YouTube.') }
-  if (!info || info.id !== expectedId || info.extractor_key !== 'Youtube' || (info._type && info._type !== 'video') || info.availability !== 'public') throw new VideoImportError('youtube-unavailable', 'El video debe ser público y estar disponible sin iniciar sesión.')
+  // Sin sesión, YouTube suele dejar `availability` vacío aunque el video sea público. La consulta
+  // va sin cookies ni cuenta, así que un video privado o con restricción falla antes en yt-dlp;
+  // se rechaza todo valor informado que no sea "public".
+  if (!info || info.id !== expectedId || info.extractor_key !== 'Youtube' || (info._type && info._type !== 'video') || (info.availability != null && info.availability !== 'public')) throw new VideoImportError('youtube-unavailable', 'El video debe ser público y estar disponible sin iniciar sesión.')
   if (info.is_live === true || !['not_live', 'was_live'].includes(info.live_status)) throw new VideoImportError('youtube-live', 'Usa un video terminado, no una transmisión en directo o programada.')
   if (info.has_drm === true || info.ext !== 'mp4' || info.protocol !== 'https' || typeof info.vcodec !== 'string' || !info.vcodec || info.vcodec === 'none' || info.requested_formats?.length || info.fragments?.length || !isGoogleVideoUrl(info.url) || !Number.isFinite(info.duration) || info.duration <= 0) throw new VideoImportError('youtube-format', 'No encontramos un archivo MP4 compatible para este video.')
   if (info.filesize != null && (!Number.isSafeInteger(info.filesize) || info.filesize <= 0 || info.filesize > maxBytes)) throw new VideoImportError('size', 'El video supera el límite o su tamaño no es válido.')
   // Do not return titles, cookies, headers, tracking details or the full extractor payload.
   return { videoId: info.id, mediaUrl: info.url, durationSeconds: info.duration, declaredBytes: info.filesize ?? null }
+}
+
+/**
+ * Formato a pedir a YouTube. Los MP4 con audio y video que ofrece hoy YouTube son de 360p, por debajo
+ * del mínimo de AceCam (720p), así que se pide solo el video H.264 en MP4 entre 720p y 1080p: el
+ * análisis no usa el audio y el worker lo descarta al generar processed.mp4. Primero el de mayor
+ * resolución que quepa en el límite (1080p si cabe; si no, 720p). Si ninguno cabe, se elige el más
+ * liviano para que el límite de tamaño devuelva su propio error en vez de "formato no disponible".
+ */
+export function youTubeFormat(maxBytes) {
+  validateLimit(maxBytes)
+  const video = 'bestvideo[ext=mp4][protocol=https][vcodec^=avc1][height>=720][height<=1080]'
+  return `${video}[filesize<=?${maxBytes}]/${video.replace('bestvideo', 'worstvideo')}`
 }
 
 /** Metadata only; configured executables are not installed or executed by the preview. */
@@ -45,7 +61,7 @@ export function createYtDlpResolver({ executable, nodeExecutable = process.execP
         '--use-extractors', '^youtube$', '--no-playlist', '--no-check-formats',
         '--simulate', '--dump-single-json', '--no-progress', '--no-warnings',
         '--proxy', '', '--retries', '0', '--extractor-retries', '0', '--socket-timeout', '10',
-        '--format', 'best[ext=mp4][protocol=https]/bestvideo[ext=mp4][protocol=https]',
+        '--format', youTubeFormat(maxBytes),
         '--', source.url,
       ], { signal: bounded, timeout: timeoutMs, maxBuffer: 2 * 1024 * 1024, windowsHide: true, env: environment }), bounded)
       bounded.throwIfAborted()
