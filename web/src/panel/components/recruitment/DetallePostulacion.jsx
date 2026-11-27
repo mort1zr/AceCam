@@ -1,4 +1,6 @@
 import { useState } from 'react'
+import { Link } from 'react-router'
+import { parseYouTubeUrl } from '../../lib/videoSources.js'
 import { StatusBadge } from '../ui'
 import { nextApplicationStates } from '../../lib/applicationStatus.js'
 import { playerAge } from '../../lib/players.js'
@@ -237,6 +239,7 @@ export default function DetallePostulacion({ application, enFicha, bloqueado, on
                 <div>
                   <a href={url.href} target="_blank" rel="noopener noreferrer">{url.hostname.replace(/^www\./, '')}{url.pathname === '/' ? '' : url.pathname}</a>
                   <span>Enlace de video</span>
+                  {parseYouTubeUrl(valor) && <><a href={url.href} target="_blank" rel="noopener noreferrer"><img style={{width:180, borderRadius:10}} src={`https://i.ytimg.com/vi/${parseYouTubeUrl(valor).videoId}/hqdefault.jpg`} alt="Vista previa del video de YouTube" loading="lazy" referrerPolicy="no-referrer" /></a><Link className="players-button-secondary" to="/analizar" state={{ recruitmentVideo: { url: parseYouTubeUrl(valor).url, playerId: application.playerId ?? '' } }}>Revisar y analizar video</Link><span>Se envía a la cola solo cuando confirmas el análisis.</span></>}
                 </div>
               </li>
             ))}

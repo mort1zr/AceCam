@@ -16,7 +16,7 @@ const fields = {
   guardianEmail: ['correo del apoderado'],
 }
 const required = ['submittedAt', 'fullName', 'birthDate', 'city', 'email', 'graduationYear', 'consentAccepted']
-const key = value => String(value ?? '').trim().normalize('NFD').replace(/\p{M}/gu, '').toLowerCase()
+const key = value => String(value ?? '').trim().normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().replace(/\s+/g, ' ')
 const googleEpoch = Date.UTC(1899, 11, 30)
 
 function birthDate(value) {

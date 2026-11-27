@@ -7,9 +7,9 @@ import TennisProgress from './TennisProgress.jsx'
 
 const initial = { sourceType: 'file', file: null, url: '', playerPosition: '', opponent: '', tournament: '', matchDate: '', result: '' }
 
-export default function AnalysisForm({ service, players, playersLoading, playersError, playerId, onPlayerChange, onNewPlayer, playerCreationOpen, disabled = false }) {
+export default function AnalysisForm({ service, players, playersLoading, playersError, playerId, onPlayerChange, onNewPlayer, playerCreationOpen, initialUrl = '', disabled = false }) {
   const id = useId()
-  const [values, setValues] = useState(initial)
+  const [values, setValues] = useState(() => initialUrl ? { ...initial, sourceType: 'link', url: initialUrl } : initial)
   const [errors, setErrors] = useState({})
   const [failure, setFailure] = useState(null)
   const [success, setSuccess] = useState('')
