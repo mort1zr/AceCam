@@ -117,6 +117,7 @@ export default function TarjetaJugador({
   indice = 0,
   ranking = null,
   escala = null,
+  photoUrl = null,
 }) {
   const carta = useRef(null)
   const rayos = useRef([])
@@ -212,7 +213,9 @@ export default function TarjetaJugador({
               AC
             </span>
           </div>
-          <AvatarTenista indice={indice} className="tarjeta-jugador-avatar" />
+          {photoUrl
+            ? <img src={photoUrl} alt="" className="tarjeta-jugador-avatar tarjeta-jugador-foto" />
+            : <AvatarTenista indice={indice} className="tarjeta-jugador-avatar" />}
           <div className="tarjeta-jugador-placa">
             <p className="tarjeta-jugador-nombre">{nombre}</p>
           </div>

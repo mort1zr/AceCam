@@ -122,6 +122,19 @@
   height: 36%;
 }
 
+.tarjeta-jugador-foto {
+  top: 6%;
+  right: 6%;
+  width: 46%;
+  height: 46%;
+  border-radius: 50%;
+  object-fit: cover;
+  object-position: center top;
+  border: 2px solid rgb(255 255 255 / 0.5);
+  box-shadow: 0 4px 10px rgb(0 0 0 / 0.35);
+  background: var(--tinta);
+}
+
 .tarjeta-jugador-placa {
   position: absolute;
   top: 43.8%;

@@ -5,6 +5,8 @@ import { auth, db, storage } from './lib/firebase.js'
 import { createHttpVideoImporter } from './lib/services/httpVideoImportService.js'
 import { createAzureVideoClient, createAzureVideoUploadService } from './lib/azureVideos.js'
 import { createVideoUploadService, MAX_VIDEO_BYTES } from './lib/videoUpload.js'
+import { createPhotoUploadService } from './lib/photoUpload.js'
+import { createPlayerPhotoService } from './lib/services/playerPhotoService.js'
 
 // PCIT-225: con VITE_VIDEO_API_URL los videos se guardan en Azure Blob (PCIT-222);
 // sin ella, en Firebase Storage (emuladores y desarrollo local).
@@ -13,6 +15,8 @@ const videoApi = videoApiUrl
   ? createAzureVideoClient({ apiUrl: videoApiUrl, getToken: () => auth.currentUser?.getIdToken() })
   : null
 const { uploadVideo } = videoApi ? createAzureVideoUploadService({ client: videoApi }) : createVideoUploadService({ storage })
+// Las fotos de perfil de los jugadores siempre van a Firebase Storage (no a Azure).
+const photoUploadService = createPhotoUploadService({ storage })
 
 function usePropsPanel() {
   const { user, profile } = useAuth()
@@ -37,6 +41,7 @@ function usePropsPanel() {
     ({ plan, periodo }) => contratarPlan({ db, orgId, plan, periodo }),
     [orgId],
   )
+  const photoService = useMemo(() => (orgId ? createPlayerPhotoService({ storage, orgId }) : null), [orgId])
   return {
     db,
     storage,
@@ -48,6 +53,8 @@ function usePropsPanel() {
     importVideo,
     maxBytes: MAX_VIDEO_BYTES,
     contratar,
+    photoService,
+    photoUploadService,
   }
 }
 

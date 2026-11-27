@@ -116,6 +116,18 @@ export function createFirestorePlayersService({ db, orgId, actorId, role = 'coac
       })
       return { ...player, ...fields }
     },
+    /** Sube/quita la foto de perfil por separado del resto de la ficha (fuera de PLAYER_EDITABLE_FIELDS). */
+    async updatePhoto(player, photoPath) {
+      const reference = doc(players, player.id)
+      await runTransaction(db, async transaction => {
+        const current = await transaction.get(reference)
+        const data = current.exists() ? current.data() : null
+        if (!data || data.deletedAt != null) throw Object.assign(new Error('Player unavailable'), { code: 'players/not-found' })
+        if (!canViewProfile(data)) throw Object.assign(new Error('Forbidden'), { code: 'permission-denied' })
+        transaction.update(reference, { photoPath: photoPath || deleteField(), updatedAt: serverTimestamp() })
+      })
+      return { ...player, photoPath: photoPath || undefined }
+    },
     async remove(player) {
       const reference = doc(players, player.id)
       await runTransaction(db, async transaction => {
