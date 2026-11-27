@@ -14,6 +14,8 @@ En **Reclutamiento → Google Forms y Sheets**, el dueño o administrador guarda
 
 Google Forms escribe en la hoja al recibir la respuesta. AceCam lee la pestaña cuando se pulsa el botón. El permiso de Google es de lectura y el token se usa durante esa sincronización.
 
+La lectura usa `spreadsheets.get` para resolver el nombre de la pestaña por su `gid`, y luego `spreadsheets.values.get` para leer esa pestaña con fechas numéricas. Ambos admiten `spreadsheets.readonly`. PCIT-253 corrige el uso anterior de `batchGetByDataFilter`, que devolvía `ACCESS_TOKEN_SCOPE_INSUFFICIENT` con ese permiso. No hace falta ampliar OAuth a permisos de escritura. El cambio requiere integrar y desplegar la nueva web antes de repetir la prueba real.
+
 Para cerrar la prueba, verifica que la respuesta aparezca una sola vez en la bandeja después de sincronizar dos veces. Confirma que una cuenta sin acceso a la hoja reciba un error y que la bandeja conserve su contenido. Usa respuestas ficticias para esta verificación.
 
 ## Web publicada
