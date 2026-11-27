@@ -33,7 +33,7 @@ function ComparisonTable({ caption, labels, overviews }) {
   )
 }
 
-function ComparisonWorkspace({ players, overviewService, selection, setSelection }) {
+function ComparisonWorkspace({ players, overviewService, selection, setSelection, photoService }) {
   const selectedPlayers = selection.map(id => players.find(player => player.id === id))
   const canCompare = selectedPlayers.filter(Boolean).length >= 2
   const ids = canCompare ? selectedPlayers.map(player => player?.id ?? '') : []
@@ -80,6 +80,7 @@ function ComparisonWorkspace({ players, overviewService, selection, setSelection
                     metrics={overview.data?.metrics}
                     indice={Math.max(0, players.findIndex(item => item.id === player.id))}
                     escala={selection.length > 3 ? 0.62 : 0.72}
+                    photoService={photoService}
                   />
                 </div>
               ) : <div className="cmp-vacia">Elige un jugador para compararlo</div>}
@@ -191,7 +192,7 @@ function HistoryComparison({ players, historyService, mode }) {
   )
 }
 
-function ComparisonPanel({ playersService, overviewService, historyService }) {
+function ComparisonPanel({ playersService, overviewService, historyService, photoService }) {
   const players = usePlayers(playersService)
   const [mode, setMode] = useState('players')
   const [selection, setSelection] = useState(['', ''])
@@ -213,14 +214,14 @@ function ComparisonPanel({ playersService, overviewService, historyService }) {
           >Añadir jugador</button>
         )}
       </div>
-      {mode === 'players' ? <ComparisonWorkspace players={players.rows} overviewService={overviewService} selection={selection} setSelection={setSelection} /> : (
+      {mode === 'players' ? <ComparisonWorkspace players={players.rows} overviewService={overviewService} selection={selection} setSelection={setSelection} photoService={photoService} /> : (
         <HistoryComparison players={players.rows} historyService={historyService} mode={mode} />
       )}
     </>
   )
 }
 
-export default function Comparador({ db, session }) {
+export default function Comparador({ db, session, photoService }) {
   const { uid, orgId, role } = session ?? {}
   const services = useMemo(() => {
     if (!db || typeof uid !== 'string' || !uid.trim() || typeof orgId !== 'string' || !orgId.trim()
@@ -242,7 +243,7 @@ export default function Comparador({ db, session }) {
           <p>Compara jugadores o revisa el rendimiento de un mismo jugador por periodos y partidos.</p>
         </div>
       </header>
-      {services ? <ComparisonPanel key={`${services.playersService.scopeKey}:${role}`} {...services} /> : (
+      {services ? <ComparisonPanel key={`${services.playersService.scopeKey}:${role}`} {...services} photoService={photoService} /> : (
         <EmptyState title="El comparador aún no está disponible" description="Inicia sesión con tu equipo para comparar jugadores." />
       )}
     </section>
