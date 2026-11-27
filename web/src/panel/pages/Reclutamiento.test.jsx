@@ -131,6 +131,21 @@ describe('Bandeja de reclutamiento', () => {
     expect(document.body.textContent).not.toContain(path)
   })
 
+  it('muestra el enlace de YouTube importado sin iniciar un análisis ni modificar Firestore', async () => {
+    const user = userEvent.setup()
+    render(page())
+    publish(application('google_gf', 'Postulante Google', 'Lima', 'nueva', session.orgId, {
+      source: 'google-forms', videoLinks: ['https://youtu.be/l7ShweLhjEs'],
+    }))
+    await user.click(screen.getByRole('button', { name: 'Postulación de Postulante Google' }))
+    const link = screen.getByRole('link', { name: 'youtu.be/l7ShweLhjEs' })
+    expect(link.getAttribute('href')).toBe('https://youtu.be/l7ShweLhjEs')
+    expect(link.getAttribute('rel')).toBe('noopener noreferrer')
+    expect(createApplicationAnalysisService).not.toHaveBeenCalled()
+    expect(runTransaction).not.toHaveBeenCalled()
+    expect(updateDoc).not.toHaveBeenCalled()
+  })
+
   it('encola el video vinculado, permite reintentar y muestra el resultado del worker', async () => {
     const user = userEvent.setup()
     const path = 'orgs/equipo-a/applications/1/video.mp4'

@@ -29,6 +29,28 @@ it('avisa cuando la pestaña no contiene las columnas de respuestas', () => {
   expect(readGoogleFormResponses([])).toEqual({ rows: [], invalidRows: [] })
 })
 
+it.each(['Enlace de YouTube', 'Enlace de YouTube (opcional)', 'Enlaces de video'])('recoge %s sin descargar ni analizar el video', title => {
+  const values = [[...header, title], [...adult, '', '', '', 'https://youtu.be/l7ShweLhjEs']]
+  const result = readGoogleFormResponses(values, '2026-11-26')
+  expect(result.invalidRows).toEqual([])
+  expect(result.rows[0].contact.videoLinks).toEqual(['https://youtu.be/l7ShweLhjEs'])
+  expect(result.rows[0].contact).not.toHaveProperty('videoPaths')
+})
+
+it('mantiene el enlace opcional y señala enlaces inválidos por fila', () => {
+  const result = readGoogleFormResponses([
+    [...header, 'Enlace de YouTube'],
+    [...adult, '', '', '', ''],
+    [...adult, '', '', '', 'https://ejemplo.test/video.mp4'],
+    [...adult, '', '', '', 'javascript:alert(1)'],
+    [...adult, '', '', '', Array(6).fill('https://youtu.be/l7ShweLhjEs').join('\n')],
+  ], '2026-11-26')
+  expect(result.rows).toHaveLength(1)
+  expect(result.rows[0].contact).not.toHaveProperty('videoLinks')
+  expect(result.invalidRows.map(row => row.number)).toEqual([3, 4, 5])
+  expect(() => readGoogleFormResponses([[...header, 'Enlace de YouTube', 'Enlaces de video']])).toThrow(/más de una columna/)
+})
+
 it('usa un ID estable dentro de la organización y la pestaña', async () => {
   const input = {
     orgId: 'org-a', source: { spreadsheetId: 'sheet-a', sheetId: 15 }, submittedAt: '46336.52',

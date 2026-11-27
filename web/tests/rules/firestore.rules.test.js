@@ -280,6 +280,50 @@ it('registra en privado la hoja de Google e importa cada respuesta una sola vez'
   await assertSucceeds(updateDoc(imported[0].ref, { status: 'en revisión' }))
   await expect(importGoogleFormApplications(db, options)).resolves.toEqual({ imported: 0, existing: 1, failed: [] })
   expect((await getDoc(imported[0].ref)).data().status).toBe('en revisión')
+
+  const matches = () => getDocs(query(collection(db, 'matches'), where('orgId', '==', ORG), where('createdBy', '==', COACH)))
+  const matchIdsBefore = (await matches()).docs.map(item => item.id).sort()
+  const usage = doc(db, 'orgs', ORG, 'usage', usagePeriod())
+  const usageBefore = (await getDoc(usage)).data()
+  await updateDoc(imported[0].ref, { internalNotes: 'Revisado por el equipo' })
+  const link = 'https://youtu.be/l7ShweLhjEs'
+  await env.withSecurityRulesDisabled(context => setDoc(doc(context.firestore(), 'users', 'coach-sin-permiso'), { orgId: ORG, role: 'coach' }))
+  const member = env.authenticatedContext('coach-sin-permiso').firestore()
+  await assertFails(updateDoc(doc(member, 'applications', imported[0].id), { videoLinks: [link], updatedAt: serverTimestamp() }))
+  await assertFails(updateDoc(doc(db, 'applications', 'a-demo'), { videoLinks: [link], updatedAt: serverTimestamp() }))
+  await assertFails(updateDoc(imported[0].ref, { videoLinks: [link], message: 'Sobrescribir', updatedAt: serverTimestamp() }))
+  await assertFails(updateDoc(imported[0].ref, { videoLinks: ['http://inseguro.test/'], updatedAt: serverTimestamp() }))
+  await assertFails(updateDoc(imported[0].ref, { videoLinks: Array(6).fill(link), updatedAt: serverTimestamp() }))
+  await assertFails(updateDoc(doc(other, 'applications', imported[0].id), { videoLinks: [link], updatedAt: serverTimestamp() }))
+  const withLinks = { ...options, rows: rows.map(row => ({ ...row, contact: { ...row.contact, videoLinks: [link] } })) }
+  await expect(importGoogleFormApplications(db, withLinks)).resolves.toEqual({ imported: 0, existing: 1, failed: [] })
+  expect((await getDoc(imported[0].ref)).data()).toMatchObject({
+    videoLinks: [link], status: 'en revisión', internalNotes: 'Revisado por el equipo', fullName: 'Postulante Google',
+  })
+  await assertFails(updateDoc(imported[0].ref, { videoLinks: ['https://youtu.be/otroVideo'], updatedAt: serverTimestamp() }))
+  await expect(importGoogleFormApplications(db, withLinks)).resolves.toEqual({ imported: 0, existing: 1, failed: [] })
+  expect((await matches()).docs.map(item => item.id).sort()).toEqual(matchIdsBefore)
+  expect((await getDoc(usage)).data()).toEqual(usageBefore)
+})
+
+it('importa una nueva postulación de Google con enlaces sin crear partidos', async () => {
+  const db = coachDb()
+  const source = { formUrl: 'https://forms.gle/RespuestaDePrueba', spreadsheetId: 'sheet-test', sheetId: 12 }
+  await setDoc(doc(db, 'orgs', ORG, 'recruitmentIntegrations', 'googleForms'), source)
+  const { rows } = readGoogleFormResponses([
+    ['Marca temporal', 'Nombre completo', 'Fecha de nacimiento', 'Ciudad', 'Correo de contacto', 'Año de graduación', 'Autorización', 'Enlace de YouTube'],
+    [46336.75, 'Postulante Google', '2000-02-15', 'Lima', 'google@example.test', 2027, 'Sí, autorizo', 'https://youtu.be/l7ShweLhjEs'],
+  ])
+  const options = { orgId: ORG, uid: COACH, source, rows }
+  await expect(importGoogleFormApplications(db, options)).resolves.toEqual({ imported: 1, existing: 0, failed: [] })
+  const apps = await getDocs(query(collection(db, 'applications'), where('orgId', '==', ORG)))
+  const imported = apps.docs.find(item => item.data().source === 'google-forms')
+  expect(imported.data().videoLinks).toEqual(['https://youtu.be/l7ShweLhjEs'])
+  expect(imported.data().videoPaths).toBeUndefined()
+  await expect(importGoogleFormApplications(db, options)).resolves.toEqual({ imported: 0, existing: 1, failed: [] })
+  const matches = await getDocs(query(collection(db, 'matches'), where('orgId', '==', ORG), where('createdBy', '==', COACH)))
+  expect(matches.docs.map(item => item.id).sort()).toEqual(['m-error', 'm-processing', 'm-ready'])
+  expect((await getDoc(doc(db, 'orgs', ORG, 'usage', usagePeriod()))).exists()).toBe(false)
 })
 
 const newPlayer = (overrides = {}) => ({

@@ -1,4 +1,4 @@
-import { normalizeApplicationContact } from './publicApplications.js'
+import { normalizeApplicationContact, parseVideoLinks } from './publicApplications.js'
 
 const fields = {
   submittedAt: ['marca temporal', 'timestamp'],
@@ -10,6 +10,7 @@ const fields = {
   consentAccepted: ['autorizacion'],
   academy: ['academia', 'academia (opcional)'],
   message: ['mensaje', 'mensaje (opcional)'],
+  videoLinks: ['enlace de youtube', 'enlace de youtube (opcional)', 'enlaces de video', 'enlaces de video (opcional)'],
   guardianName: ['nombre del apoderado'],
   guardianPhone: ['telefono del apoderado'],
   guardianEmail: ['correo del apoderado'],
@@ -51,7 +52,9 @@ export function readGoogleFormResponses(values, today) {
     const number = index + 2
     try {
       if (!submittedAt) throw new Error('Falta la marca temporal.')
-      rows.push({ number, submittedAt, contact: normalizeApplicationContact(input, today) })
+      const contact = normalizeApplicationContact(input, today)
+      const videoLinks = parseVideoLinks(input.videoLinks)
+      rows.push({ number, submittedAt, contact: { ...contact, ...(videoLinks.length ? { videoLinks } : {}) } })
     } catch (error) {
       invalidRows.push({ number, message: Object.values(error.fields ?? {}).join(' ') || error.message })
     }
