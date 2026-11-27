@@ -21,6 +21,8 @@ import math
 
 import numpy as np
 
+from court import COURT_LENGTH, DOUBLES_WIDTH
+
 MODEL_STATS_VERSION = "acecam.model-stats.v1"
 MATCH_STATS_VERSION = "acecam.match-stats.v1"
 
@@ -32,6 +34,8 @@ POSITION_TO_PLAYER = {"arriba": FAR_PLAYER, "abajo": NEAR_PLAYER}
 SMOOTHING_SECONDS = 0.3
 # Ventana para la velocidad máxima de desplazamiento.
 SPEED_WINDOW_SECONDS = 1.0
+# Tamaño de celda del mapa de calor (TA-33/PCIT-235); igual que report/heatmap.py.
+HEATMAP_CELL_M = 0.5
 
 
 def _round(value, digits=1):
@@ -100,6 +104,45 @@ def movement_stats(positions_m, fps, smoothing_seconds=SMOOTHING_SECONDS, window
     }
 
 
+def heatmap_cells(positions_m, player, fps, cell=HEATMAP_CELL_M):
+    """Cuadrícula de ocupación de la propia mitad de la cancha del jugador (TA-33/PCIT-235).
+
+    positions_m: lista de (x, y) en metros por fotograma (None si no se detectó), el mismo
+    formato que movement_stats(). Cada celda acumula segundos (1/fps por fotograma), sin
+    suavizar ni normalizar; las posiciones justo fuera de la cancha se ajustan a la celda del
+    borde, para no perder tiempo por el temblor de la detección.
+
+    Filas desde la red (0) hasta la línea de fondo (última). Columnas de izquierda a derecha
+    **desde el punto de vista del jugador**: el lado lejano (1) ve el ancho invertido respecto
+    al cercano (2) — la misma convención de izquierda/derecha que serve_side() — porque ambos
+    miran hacia la red, uno hacia +y y el otro hacia -y (ver renumber_far_near).
+
+    El tamaño de la cuadrícula es siempre el mismo (no depende del partido), para que la web
+    pueda sumar los mapas de varios partidos celda a celda. Devuelve None si no hay ninguna
+    posición válida.
+    """
+    columns = math.ceil(DOUBLES_WIDTH / cell)
+    rows = math.ceil((COURT_LENGTH / 2) / cell)
+    net_y = COURT_LENGTH / 2
+    grid = [0.0] * (columns * rows)
+    seen = False
+    for position in positions_m:
+        if position is None:
+            continue
+        x_m, y_m = position
+        if math.isnan(x_m) or math.isnan(y_m):
+            continue
+        seen = True
+        col_m = (DOUBLES_WIDTH - x_m) if player == FAR_PLAYER else x_m
+        row_m = (net_y - y_m) if player == FAR_PLAYER else (y_m - net_y)
+        col = min(max(int(col_m // cell), 0), columns - 1)
+        row = min(max(int(row_m // cell), 0), rows - 1)
+        grid[row * columns + col] += 1.0 / fps
+    if not seen:
+        return None
+    return {"columns": columns, "rows": rows, "cells": [_round(v) for v in grid]}
+
+
 def shot_stats(speeds_kmh):
     stats = {"count": len(speeds_kmh), "sumSpeedKmh": _round(sum(speeds_kmh))}
     if speeds_kmh:
@@ -116,8 +159,12 @@ def build_model_statistics(shots, player_positions, fps, num_frames):
     players = {}
     for player in (FAR_PLAYER, NEAR_PLAYER):
         entry = {"shots": shot_stats([s["speedKmh"] for s in shots if s["player"] == player])}
-        movement = movement_stats([frame.get(player) for frame in player_positions], fps)
+        player_frames = [frame.get(player) for frame in player_positions]
+        movement = movement_stats(player_frames, fps)
         if movement is not None:
+            heatmap = heatmap_cells(player_frames, player, fps)
+            if heatmap is not None:
+                movement["heatmap"] = heatmap
             entry["movement"] = movement
         players[str(player)] = entry
     return {

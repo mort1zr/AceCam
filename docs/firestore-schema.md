@@ -229,7 +229,8 @@ statistics: {
   durationSeconds: 24,
   player: {
     shots:    { count: 6, sumSpeedKmh: 630, maxSpeedKmh: 171 },
-    movement: { distanceMeters: 25, avgSpeedKmh: 11.4, maxSpeedKmh: 22.7 },
+    movement: { distanceMeters: 25, avgSpeedKmh: 11.4, maxSpeedKmh: 22.7,
+      heatmap: { columns: 22, rows: 24, cells: [0, 0.3, /* … columns × rows */] } },
     serve: {
       count: 2, fromRight: 1, fromLeft: 1,          // saques (intentos, también los segundos)
       sumSpeedKmh: 110, sampleCount: 1, maxSpeedKmh: 110,  // velocidad media hasta el bote
@@ -252,7 +253,7 @@ statistics: {
 | --- | --- | --- |
 | `shots.count`, `shots.sumSpeedKmh`, `shots.maxSpeedKmh` | Golpes medidos y su velocidad (distancia entre los jugadores / tiempo hasta el golpe del rival) | `maxSpeedKmh` falta si no hay golpes |
 | `movement.*` | Distancia recorrida y velocidad del jugador | Si no se pudo seguir al jugador |
-| `movement.heatmap` (`columns`, `rows`, `cells`) | **Pendiente del modelo.** Mapa de calor del jugador: cuadrícula de su propia mitad de la cancha con `cells.length === columns × rows` (un número por celda: fotogramas o tiempo que pasó ahí, sin normalizar). Filas desde la red (primera fila) hasta la línea de fondo (última); columnas de izquierda a derecha **desde el punto de vista del jugador**, así que para el jugador del fondo lejano hay que invertir el eje de la imagen. Todos los partidos deben usar el mismo tamaño de cuadrícula: la web los suma | Hasta que el modelo la escriba |
+| `movement.heatmap` (`columns`, `rows`, `cells`) | Mapa de calor del jugador: cuadrícula de su propia mitad de la cancha (`stats.heatmap_cells`, TA-33/PCIT-235), con `cells.length === columns × rows` (segundos sin normalizar, uno por celda). Filas desde la red (primera fila) hasta la línea de fondo (última); columnas de izquierda a derecha **desde el punto de vista del jugador** (misma convención que `serve.fromRight`/`fromLeft`), así que el jugador del fondo lejano ve el ancho invertido respecto al cercano. Tamaño de cuadrícula fijo (no depende del partido): la web los suma entre partidos | Si falta `movement` (no se pudo seguir al jugador) |
 | `serve.count`, `serve.fromRight`, `serve.fromLeft` | Saques detectados y desde qué lado (derecha o izquierda del sacador, mirando a la red) | Nunca: 0 si no sacó |
 | `serve.sumSpeedKmh`, `serve.sampleCount`, `serve.maxSpeedKmh` | Velocidad media del saque **hasta el bote**, solo de los saques con bote visto. Es menor que la de un radar, que mide la salida de la raqueta | `maxSpeedKmh` falta si `sampleCount` es 0 |
 | `serve.firstServe`, `serve.secondServe` (`sampleCount`, `sumSpeedKmh`, `maxSpeedKmh`) | **Pendiente del modelo.** Velocidad del primer y del segundo saque por separado, hasta el bote y solo de los saques con bote visto. El Dashboard ya las lee: muestra la media (`sumSpeedKmh / sampleCount`) y la máxima de cada uno | Hasta que el modelo las escriba; `maxSpeedKmh` falta si `sampleCount` es 0 |
