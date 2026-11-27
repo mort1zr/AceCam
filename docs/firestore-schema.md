@@ -138,6 +138,7 @@ El resto los completa la gestión completa (PCIT-42).
 | `graduationYear` | number \| null | no | Año en que termina el colegio |
 | `coachName` | string \| null | no | Entrenador del jugador en su academia |
 | `guardian` | object \| null | sí si es menor de 18 | `{ name, phone, email }` del padre, madre o apoderado |
+| `photoPath` | string \| null | no | Ruta en Storage de la foto de perfil: exactamente `orgs/{orgId}/players/{playerId}/photo.(jpg\|jpeg\|png\|webp)`. Se sube y se quita por separado del resto de la ficha (`service.updatePhoto`), nunca desde el formulario de edición |
 | `consent` | object | sí | Ver abajo |
 | `createdBy` | string | sí | `uid` del entrenador |
 | `createdAt` | Timestamp | sí | |

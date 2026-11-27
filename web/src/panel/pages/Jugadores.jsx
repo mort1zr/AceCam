@@ -28,7 +28,7 @@ const columns = [
   { key: 'utr', label: 'UTR', render: utr => (utr == null ? '—' : utr) },
 ]
 
-function PlayersWorkspace({ service, rankingService }) {
+function PlayersWorkspace({ service, rankingService, uid, photoService, photoUploadService }) {
   const { rows, loading, error, retry } = usePlayers(service)
   const [showForm, setShowForm] = useState(false)
   const [notice, setNotice] = useState('')
@@ -80,7 +80,7 @@ function PlayersWorkspace({ service, rankingService }) {
   }
 
   if (profilePlayer) return (
-    <PlayerProfile key={profilePlayer.id} service={service} player={profilePlayer} roster={rows} rankingService={rankingService} onBack={() => setProfileId('')} />
+    <PlayerProfile key={profilePlayer.id} service={service} player={profilePlayer} roster={rows} rankingService={rankingService} onBack={() => setProfileId('')} actorId={uid} photoService={photoService} photoUploadService={photoUploadService} />
   )
 
   return (
@@ -136,7 +136,7 @@ function PlayersWorkspace({ service, rankingService }) {
   )
 }
 
-export default function Jugadores({ service, db, session }) {
+export default function Jugadores({ service, db, session, photoService, photoUploadService }) {
   // The authentication provider supplies uid and orgId together from the same verified session.
   const uid = session?.uid
   const orgId = session?.orgId
@@ -162,5 +162,5 @@ export default function Jugadores({ service, db, session }) {
       <p className="players-footnote">Cada jugador es una historia. El siguiente paso es analizar su juego.</p>
     </section>
   )
-  return <PlayersWorkspace key={`${playersService.scopeKey}:${role ?? ''}`} service={playersService} rankingService={rankingService} />
+  return <PlayersWorkspace key={`${playersService.scopeKey}:${role ?? ''}`} service={playersService} rankingService={rankingService} uid={uid} photoService={photoService} photoUploadService={photoUploadService} />
 }
