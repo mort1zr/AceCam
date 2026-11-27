@@ -1,9 +1,11 @@
 from .frame_state import FrameState, PlayerFrameStats, build_frame_states
 from .match_stats import (
+    HEATMAP_CELL_M,
     MATCH_STATS_VERSION,
     MODEL_STATS_VERSION,
     add_serve_and_rally_stats,
     build_model_statistics,
+    heatmap_cells,
     movement_stats,
     rally_category,
     rally_length,
@@ -16,11 +18,13 @@ from .shots import measure_shots
 
 __all__ = [
     "FrameState",
+    "HEATMAP_CELL_M",
     "MATCH_STATS_VERSION",
     "MODEL_STATS_VERSION",
     "PlayerFrameStats",
     "build_frame_states",
     "build_model_statistics",
+    "heatmap_cells",
     "measure_shots",
     "movement_stats",
     "renumber_far_near",
