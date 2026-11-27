@@ -666,9 +666,10 @@ service cloud.firestore {
     function validGoogleApplication(data) {
       return canInvite(data.orgId)
         && data.keys().hasOnly(['orgId', 'source', 'status', 'fullName', 'birthDate', 'city',
-            'email', 'graduationYear', 'academy', 'guardian', 'message', 'consent', 'createdAt'])
+            'email', 'graduationYear', 'academy', 'guardian', 'message', 'consent', 'createdAt', 'videoLinks'])
         && data.source == 'google-forms'
         && validApplicationContactFields(data)
+        && publicVideoLinks(data)
         && validApplicationConsent(data, request.auth.uid, ['applications-v1'])
         && exists(/databases/$(database)/documents/orgs/$(data.orgId)/recruitmentIntegrations/googleForms);
     }
@@ -679,6 +680,18 @@ service cloud.firestore {
         || (from == 'en revisión' && to == 'analizada')
         || (from == 'analizada' && to in ['contactada', 'descartada'])
         || (from == 'contactada' && to == 'descartada');
+    }
+
+    // PCIT-254: completar solo enlaces faltantes de una importación de Google anterior.
+    function canCompleteGoogleApplicationLinks(applicationId) {
+      return isGoogleApplicationId(applicationId)
+        && resource.data.get('source', '') == 'google-forms'
+        && canInvite(resource.data.orgId)
+        && resource.data.get('videoLinks', []).size() == 0
+        && request.resource.data.get('videoLinks', []).size() > 0
+        && publicVideoLinks(request.resource.data)
+        && onlyChanges(['videoLinks', 'updatedAt'])
+        && request.resource.data.updatedAt == request.time;
     }
 
     function canLinkApplicationPlayer() {
@@ -708,13 +721,15 @@ service cloud.firestore {
       allow create: if isGoogleApplicationId(applicationId) && validGoogleApplication(request.resource.data);
 
       // PCIT-217: el equipo solo cambia el estado y sus notas. Los datos que envió la
-      // persona (contacto, apoderado, videos, autorización) no se reescriben.
-      allow update: if inOrg(resource.data.orgId)
+      // persona (contacto, apoderado, videos, autorización) no se reescriben, salvo
+      // completar enlaces ausentes de Google mediante la comprobación específica.
+      allow update: if (inOrg(resource.data.orgId)
         && onlyChanges(['status', 'internalNotes', 'reviewedBy', 'updatedAt'])
         && request.resource.data.status in ['nueva', 'en revisión', 'analizada', 'contactada', 'descartada']
         && validApplicationTransition(resource.data.status, request.resource.data.status)
         && optionalText(request.resource.data, 'internalNotes', 2000)
-        && request.resource.data.get('reviewedBy', null) in [resource.data.get('reviewedBy', null), request.auth.uid];
+        && request.resource.data.get('reviewedBy', null) in [resource.data.get('reviewedBy', null), request.auth.uid])
+        || canCompleteGoogleApplicationLinks(applicationId);
 
       allow update: if inOrg(resource.data.orgId) && canLinkApplicationPlayer();
 

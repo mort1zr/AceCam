@@ -12,7 +12,15 @@ export async function importGoogleFormApplications(db, { orgId, uid, source, row
       return await runTransaction(db, async transaction => {
         const previous = await transaction.get(reference)
         signal?.throwIfAborted()
-        if (previous.exists()) return 'existing'
+        if (previous.exists()) {
+          const current = previous.data()
+          // Completar importaciones anteriores sin modificar datos revisados ni enlaces existentes.
+          if (current.source === 'google-forms' && current.orgId === orgId &&
+              !current.videoLinks?.length && row.contact.videoLinks?.length) {
+            transaction.update(reference, { videoLinks: row.contact.videoLinks, updatedAt: serverTimestamp() })
+          }
+          return 'existing'
+        }
         const now = serverTimestamp()
         transaction.set(reference, {
           orgId,
